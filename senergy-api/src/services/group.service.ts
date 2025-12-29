@@ -8,7 +8,50 @@ export class GroupService {
   private usersCol = db.collection('users')
 
   /**
+   * Helper: Convert Discord ID to Firebase user ID
+   */
+  private async getFirebaseUserIdFromDiscordId(discordId: string): Promise<string> {
+    const snapshot = await this.usersCol
+      .where('discordId', '==', discordId)
+      .limit(1)
+      .get()
+
+    if (snapshot.empty) {
+      throw new Error(`User with Discord ID ${discordId} not found. They may need to register and verify.`)
+    }
+
+    return snapshot.docs[0].id
+  }
+
+  /**
+   * Helper: Get user by Firebase ID or Discord ID
+   */
+  private async getUserByIdOrDiscordId(userId: string): Promise<{ id: string; data: any }> {
+    // First try as Firebase ID
+    let userDoc = await this.usersCol.doc(userId).get()
+    
+    if (userDoc.exists) {
+      return { id: userDoc.id, data: userDoc.data() }
+    }
+
+    // Try as Discord ID
+    const snapshot = await this.usersCol
+      .where('discordId', '==', userId)
+      .limit(1)
+      .get()
+
+    if (snapshot.empty) {
+      throw new Error(`User ${userId} not found`)
+    }
+
+    const doc = snapshot.docs[0]
+    return { id: doc.id, data: doc.data() }
+  }
+
+  /**
    * Create a new group
+   * @param createdBy - Firebase user ID or Discord ID of creator
+   * @param memberIds - Array of Firebase user IDs or Discord IDs
    */
   async createGroup(
     createdBy: string,
@@ -18,23 +61,39 @@ export class GroupService {
     communityId?: string,
     communityName?: string
   ): Promise<Group> {
-    // Ensure creator is in the group
-    if (!memberIds.includes(createdBy)) {
-      memberIds = [createdBy, ...memberIds]
+    // Convert Discord IDs to Firebase IDs if needed
+    const creatorData = await this.getUserByIdOrDiscordId(createdBy)
+    const creatorFirebaseId = creatorData.id
+
+    // Convert all member IDs (could be Discord IDs or Firebase IDs)
+    const firebaseMemberIds: string[] = []
+    for (const memberId of memberIds) {
+      try {
+        const memberData = await this.getUserByIdOrDiscordId(memberId)
+        firebaseMemberIds.push(memberData.id)
+      } catch (error) {
+        console.warn(`Skipping invalid member ID: ${memberId}`, error)
+      }
     }
 
-    // Get all member profiles
+    // Ensure creator is in the group
+    if (!firebaseMemberIds.includes(creatorFirebaseId)) {
+      firebaseMemberIds.unshift(creatorFirebaseId)
+    }
+
+    // Get all member profiles using Firebase IDs
     const memberProfiles: { [key: string]: GroupMember } = {}
-    for (const memberId of memberIds) {
-      const userDoc = await this.usersCol.doc(memberId).get()
+    for (const firebaseId of firebaseMemberIds) {
+      const userDoc = await this.usersCol.doc(firebaseId).get()
 
       if (!userDoc.exists) {
-        throw new Error(`User ${memberId} not found`)
+        console.warn(`User ${firebaseId} not found, skipping`)
+        continue
       }
 
-      const user = userDoc.data()
-      memberProfiles[memberId] = {
-        userId: memberId,
+      const user = userDoc.data()!
+      memberProfiles[firebaseId] = {
+        userId: firebaseId,
         displayName: user.displayName,
         adjustmentFactor: user.adjustmentFactor || 0,
         personalityType: user.personalityType || 'Unknown',
@@ -42,9 +101,9 @@ export class GroupService {
     }
 
     const groupData = {
-      createdBy,
+      createdBy: creatorFirebaseId,
       createdAt: new Date().toISOString(),
-      members: memberIds,
+      members: firebaseMemberIds,
       memberProfiles,
       searchLocation,
       searchRadius: 15,
@@ -59,8 +118,8 @@ export class GroupService {
     const groupRef = await this.groupsCol.add(groupData)
 
     // Update user stats
-    for (const memberId of memberIds) {
-      await this.updateUserGroupStats(memberId, 1)
+    for (const firebaseId of firebaseMemberIds) {
+      await this.updateUserGroupStats(firebaseId, 1)
     }
 
     return { id: groupRef.id, ...groupData } as Group
@@ -80,11 +139,20 @@ export class GroupService {
   }
 
   /**
-   * Get all active groups for a user
+   * Get all active groups for a user (supports Discord ID or Firebase ID)
    */
   async getUserActiveGroups(userId: string): Promise<Group[]> {
+    // Try to get Firebase ID if this is a Discord ID
+    let firebaseId = userId
+    try {
+      const userData = await this.getUserByIdOrDiscordId(userId)
+      firebaseId = userData.id
+    } catch (error) {
+      // If conversion fails, try with original ID
+    }
+
     const snapshot = await this.groupsCol
-      .where('members', 'array-contains', userId)
+      .where('members', 'array-contains', firebaseId)
       .where('status', '==', 'active')
       .get()
 
@@ -101,21 +169,18 @@ export class GroupService {
       throw new Error('Group not found')
     }
 
+    // Convert to Firebase ID if needed
+    const userData = await this.getUserByIdOrDiscordId(userId)
+    const firebaseId = userData.id
+    const user = userData.data
+
     const group = groupDoc.data() as Group
-    if (group.members.includes(userId)) {
+    if (group.members.includes(firebaseId)) {
       throw new Error('User already in group')
     }
 
-    // Get user profile
-    const userDoc = await this.usersCol.doc(userId).get()
-
-    if (!userDoc.exists) {
-      throw new Error('User not found')
-    }
-
-    const user = userDoc.data()
     const memberProfile: GroupMember = {
-      userId,
+      userId: firebaseId,
       displayName: user.displayName,
       adjustmentFactor: user.adjustmentFactor || 0,
       personalityType: user.personalityType || 'Unknown',
@@ -123,11 +188,11 @@ export class GroupService {
 
     const groupRef = this.groupsCol.doc(groupId)
     await groupRef.update({
-      members: admin.firestore.FieldValue.arrayUnion(userId),
-      [`memberProfiles.${userId}`]: memberProfile,
+      members: admin.firestore.FieldValue.arrayUnion(firebaseId),
+      [`memberProfiles.${firebaseId}`]: memberProfile,
     })
 
-    await this.updateUserGroupStats(userId, 1)
+    await this.updateUserGroupStats(firebaseId, 1)
   }
 
   /**
@@ -140,21 +205,25 @@ export class GroupService {
       throw new Error('Group not found')
     }
 
+    // Convert to Firebase ID if needed
+    const userData = await this.getUserByIdOrDiscordId(userId)
+    const firebaseId = userData.id
+
     const group = groupDoc.data() as Group
 
     // Don't allow creator to leave (must disband group)
-    if (group.createdBy === userId && group.members.length > 1) {
+    if (group.createdBy === firebaseId && group.members.length > 1) {
       throw new Error('Creator cannot leave group. Disband the group instead.')
     }
 
     const groupRef = this.groupsCol.doc(groupId)
     await groupRef.update({
-      members: admin.firestore.FieldValue.arrayRemove(userId),
+      members: admin.firestore.FieldValue.arrayRemove(firebaseId),
     })
 
     // Remove from votes
     const updatedVotes = { ...group.votes }
-    delete updatedVotes[userId]
+    delete updatedVotes[firebaseId]
     await groupRef.update({ votes: updatedVotes })
   }
 
@@ -196,13 +265,17 @@ export class GroupService {
       throw new Error('Group not found')
     }
 
+    // Convert to Firebase ID if needed
+    const userData = await this.getUserByIdOrDiscordId(userId)
+    const firebaseId = userData.id
+
     const group = groupDoc.data() as Group
-    if (!group.members.includes(userId)) {
+    if (!group.members.includes(firebaseId)) {
       throw new Error('User not in group')
     }
 
     await this.groupsCol.doc(groupId).update({
-      [`votes.${userId}`]: rankedPlaceIds,
+      [`votes.${firebaseId}`]: rankedPlaceIds,
     })
   }
 
@@ -272,8 +345,12 @@ export class GroupService {
       throw new Error('Group not found')
     }
 
+    // Convert to Firebase ID if needed
+    const userData = await this.getUserByIdOrDiscordId(userId)
+    const firebaseId = userData.id
+
     const group = groupDoc.data() as Group
-    if (group.createdBy !== userId) {
+    if (group.createdBy !== firebaseId) {
       throw new Error('Only creator can disband group')
     }
 
@@ -298,7 +375,7 @@ export class GroupService {
     if (userDoc.exists) {
       const user = userDoc.data()
       await this.usersCol.doc(userId).update({
-        totalGroupsJoined: (user.totalGroupsJoined || 0) + increment,
+        totalGroupsJoined: (user?.totalGroupsJoined || 0) + increment,
       })
     }
   }

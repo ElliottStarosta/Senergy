@@ -355,6 +355,32 @@ export const Quiz: React.FC = () => {
                 />
               </div>
             </div>
+
+            {/* Discord Verification Loading (only show if verificationCode exists) */}
+            {results.verificationCode && (
+              <div className="mt-8 pt-8 border-t border-neutral-200">
+                <div className="flex flex-col items-center justify-center gap-3">
+                  <div
+                    className="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full"
+                    ref={(el) => {
+                      if (el) {
+                        gsap.to(el, {
+                          rotation: 360,
+                          duration: 0.8,
+                          repeat: -1,
+                          ease: 'linear'
+                        })
+                      }
+                    }}
+                  />
+                  <p className="text-sm font-medium text-neutral-600">
+                    Redirecting to verification...
+                  </p>
+                </div>
+              </div>
+            )}
+            
+
           </div>
 
 
@@ -412,8 +438,8 @@ export const Quiz: React.FC = () => {
                   key={value}
                   onClick={() => handleResponse(value)}
                   className={`flex-1 py-4 px-2 rounded-lg font-semibold transition-all transform ${responses[currentQuestion] === value
-                      ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-lg scale-105'
-                      : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                    ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-lg scale-105'
+                    : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
                     }`}
                 >
                   <div className="text-lg mb-1">{value}</div>

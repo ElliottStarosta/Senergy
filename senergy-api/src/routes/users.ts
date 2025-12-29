@@ -62,8 +62,10 @@ router.get('/discord/:discordId/profile', async (req: Request, res: Response) =>
   try {
     const { discordId } = req.params
 
-    // Find user by Discord ID
-    const snapshot = await db.collection('users').where('discordId', '==', discordId).get()
+    const snapshot = await db
+      .collection('users')
+      .where('discordId', '==', discordId)
+      .get()
 
     if (snapshot.empty) {
       return res.status(404).json({
@@ -82,17 +84,36 @@ router.get('/discord/:discordId/profile', async (req: Request, res: Response) =>
       })
     }
 
-    // Return only public fields
     const publicProfile = {
       id: userDoc.id,
-      displayName: userData.displayName,
-      avatar: userData.avatar || null,
-      personalityType: userData.personalityType || null,
-      adjustmentFactor: userData.adjustmentFactor || 0,
-      totalRatingsCount: userData.totalRatingsCount || 0,
-      totalGroupsJoined: userData.totalGroupsJoined || 0,
-      city: userData.city || null,
-      createdAt: userData.createdAt,
+      discordId: userData.discordId ?? null,
+      displayName: userData.displayName ?? null,
+      avatar: userData.avatar ?? null,
+      personalityType: userData.personalityType ?? null,
+      discordVerified: userData.discordVerified ?? false,
+
+      adjustmentFactor:
+        typeof userData.adjustmentFactor === 'number'
+          ? Number(userData.adjustmentFactor.toFixed(3))
+          : 0,
+
+      totalRatingsCount: userData.totalRatingsCount ?? 0,
+      totalGroupsJoined: userData.totalGroupsJoined ?? 0,
+
+      lastRatedPlaceLocation: userData.lastRatedPlaceLocation
+        ? {
+            lat: userData.lastRatedPlaceLocation.lat,
+            lng: userData.lastRatedPlaceLocation.lng,
+          }
+        : null,
+
+      createdAt: userData.createdAt?.toDate
+        ? userData.createdAt.toDate().toISOString()
+        : userData.createdAt ?? null,
+
+      quizCompletedAt: userData.quizCompletedAt?.toDate
+        ? userData.quizCompletedAt.toDate().toISOString()
+        : userData.quizCompletedAt ?? null,
     }
 
     res.json({
@@ -107,6 +128,7 @@ router.get('/discord/:discordId/profile', async (req: Request, res: Response) =>
     })
   }
 })
+
 
 /**
  * GET /api/users/:userId/profile

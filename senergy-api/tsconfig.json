@@ -28,6 +28,6 @@
       "module": "commonjs"
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "algolia-debug.ts"],
   "exclude": ["node_modules", "dist"]
 }

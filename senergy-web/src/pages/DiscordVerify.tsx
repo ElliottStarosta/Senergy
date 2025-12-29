@@ -20,6 +20,12 @@ export const DiscordVerify: React.FC = () => {
   const subtitleRef = useRef<HTMLParagraphElement>(null)
   const copyBtnRef = useRef<HTMLButtonElement>(null)
 
+
+  const cmdCodeRef = useRef<HTMLElement>(null)
+  const cmdCopyIconRef = useRef<HTMLElement>(null)
+  const [cmdCopied, setCmdCopied] = useState(false)
+  const [cmdHovered, setCmdHovered] = useState(false)
+  const cmdContainerRef = useRef<HTMLDivElement>(null)
   const [verificationCode, setVerificationCode] = useState<string>('')
   const [copied, setCopied] = useState(false)
   const [timeRemaining, setTimeRemaining] = useState(24 * 60 * 60)
@@ -35,6 +41,139 @@ export const DiscordVerify: React.FC = () => {
     }
     setVerificationCode(code)
   }, [location.state, navigate])
+
+  useEffect(() => {
+    if (!cmdCodeRef.current || !cmdCopyIconRef.current) return
+
+    const code = cmdCodeRef.current
+    const icon = cmdCopyIconRef.current
+
+    // Set initial state for the icon
+    gsap.set(icon, {
+      x: -28,
+      opacity: 0
+    })
+
+    const handleMouseEnter = () => {
+      setCmdHovered(true)
+
+      const tl = gsap.timeline()
+
+      // First: Expand the code block padding
+      tl.to(code, {
+        paddingRight: '32px',
+        duration: 0.25,
+        ease: 'power2.out'
+      })
+
+      // Then: Animate the code block scale and icon together
+      tl.to(code, {
+        scale: 1.02,
+        y: -2,
+        duration: 0.2,
+        ease: 'power2.out'
+      }, '-=0.1')
+
+      tl.to(icon, {
+        x: 0,
+        opacity: 1,
+        duration: 0.3,
+        ease: 'back.out(2)'
+      }, '-=0.2')
+    }
+
+    const handleMouseLeave = () => {
+      setCmdHovered(false)
+
+      const tl = gsap.timeline()
+
+      // First: Animate icon out
+      tl.to(icon, {
+        x: -28,
+        opacity: 0,
+        duration: 0.2,
+        ease: 'power2.in'
+      })
+
+      tl.to(code, {
+        scale: 1,
+        y: 0,
+        duration: 0.2,
+        ease: 'power2.out'
+      }, '-=0.15')
+
+      // Then: Shrink the padding
+      tl.to(code, {
+        paddingRight: '12px',
+        duration: 0.25,
+        ease: 'power2.out'
+      }, '-=0.1')
+    }
+
+    code.addEventListener('mouseenter', handleMouseEnter)
+    code.addEventListener('mouseleave', handleMouseLeave)
+
+    return () => {
+      code.removeEventListener('mouseenter', handleMouseEnter)
+      code.removeEventListener('mouseleave', handleMouseLeave)
+    }
+  }, [verificationCode])
+
+  // Add this useEffect for the color change animation when copied
+  useEffect(() => {
+    if (!cmdCodeRef.current) return
+
+    const code = cmdCodeRef.current
+
+    if (cmdCopied) {
+      // Store original background
+      const originalBg = window.getComputedStyle(code).background
+      code.dataset.originalBg = originalBg
+
+      gsap.to(code, {
+        background: 'linear-gradient(to bottom right, rgb(22, 163, 74), rgb(21, 128, 61))',
+        scale: 1.05,
+        duration: 0.4,
+        ease: 'back.out(2)',
+        onComplete: () => {
+          gsap.to(code, {
+            scale: 1,
+            duration: 0.3,
+            ease: 'elastic.out(1, 0.5)'
+          })
+        }
+      })
+    } else {
+      // Restore original background
+      const originalBg = code.dataset.originalBg
+      if (originalBg) {
+        gsap.to(code, {
+          background: originalBg,
+          duration: 0.8,
+          ease: 'power2.inOut'
+        })
+      }
+    }
+  }, [cmdCopied])
+
+  // Add this handler function
+  const handleCopyCommand = () => {
+    const command = `/verify ${verificationCode}`
+    navigator.clipboard.writeText(command)
+    setCmdCopied(true)
+
+    // Click animation
+    if (cmdCodeRef.current) {
+      gsap.timeline()
+        .to(cmdCodeRef.current, {
+          scale: 0.95,
+          duration: 0.1,
+          ease: 'power2.in'
+        })
+    }
+
+    setTimeout(() => setCmdCopied(false), 2000)
+  }
 
   // Countdown timer
   useEffect(() => {
@@ -525,9 +664,25 @@ export const DiscordVerify: React.FC = () => {
                 <div>
                   <p className="font-bold text-slate-900">Send the command</p>
                   <p className="text-sm text-slate-600 mb-2">Type this command in your DM:</p>
-                  <code className="px-3 py-2 bg-gradient-to-br from-blue-600 to-blue-900 text-white rounded-lg text-sm font-mono inline-block transition-all duration-300">
-                    /verify {verificationCode}
-                  </code>
+                  <div className="relative inline-block">
+                    <code
+                      ref={cmdCodeRef}
+                      onClick={handleCopyCommand}
+                      className="px-3 py-2 bg-gradient-to-br from-blue-600 to-blue-900 text-white rounded-lg text-sm font-mono inline-block transition-all duration-300 cursor-pointer relative"
+                      style={{ paddingRight: '12px' }}
+                    >
+                      /verify {verificationCode}
+                      <i
+                        ref={cmdCopyIconRef}
+                        className={`fas ${cmdCopied ? 'fa-check' : 'fa-copy'} absolute top-1/2 -translate-y-1/2 text-white text-sm pointer-events-none`}
+                        style={{
+                          opacity: 0,
+                          right: '8px'
+                        }}
+                      />
+                    </code>
+                  </div>
+
                 </div>
               </div>
 

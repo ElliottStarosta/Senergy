@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { ratingService } from '@/services/rating.service'
+import { algoliaService } from '@/services/algolia.service'
 
 const router = Router()
 
@@ -21,7 +22,78 @@ router.get('/search', async (req: Request, res: Response) => {
       })
     }
 
-    // Use OpenStreetMap Nominatim API (free, no API key required)
+    // Parse location if provided
+    let lat: number | undefined
+    let lng: number | undefined
+    if (location && typeof location === 'string') {
+      const [latStr, lngStr] = location.split(',')
+      lat = parseFloat(latStr)
+      lng = parseFloat(lngStr)
+    }
+
+    // Try Algolia first (if enabled)
+    if (algoliaService.isAvailable() && lat !== undefined && lng !== undefined) {
+      console.log('[API] Trying Algolia search...')
+      const algoliaStartTime = Date.now()
+      
+      const algoliaResults = await algoliaService.searchPlaces(
+        searchQuery,
+        { lat, lng },
+        parseFloat(radius as string) || 15000
+      )
+      
+      const algoliaTime = Date.now() - algoliaStartTime
+      console.log(`[API] Algolia returned ${algoliaResults.length} results in ${algoliaTime}ms`)
+
+      if (algoliaResults.length > 0) {
+        // Enrich with stats from our database
+        const enrichedResults = await Promise.all(
+          algoliaResults.map(async (place: any) => {
+            const stats = await ratingService.getPlaceStats(place.objectID)
+            return {
+              id: place.objectID,
+              name: place.name,
+              address: place.address,
+              location: place.location,
+              category: place.category || 'establishment',
+              stats: stats || {
+                totalRatings: 0,
+                avgOverallScore: 0,
+                byPersonality: {
+                  introvert: { avgScore: 0, count: 0 },
+                  ambivert: { avgScore: 0, count: 0 },
+                  extrovert: { avgScore: 0, count: 0 },
+                },
+                avgCategories: {
+                  crowdSize: 0,
+                  noiseLevel: 0,
+                  socialEnergy: 0,
+                  service: 0,
+                  cleanliness: 0,
+                  atmosphere: 0,
+                  accessibility: 0,
+                },
+                lastRatedAt: '',
+              },
+            }
+          })
+        )
+
+        const totalTime = Date.now() - requestStartTime
+        console.log(`[API] ✅ Algolia search complete in ${totalTime}ms - returning ${enrichedResults.length} places`)
+
+        return res.json({
+          success: true,
+          data: enrichedResults,
+          count: enrichedResults.length,
+          source: 'algolia',
+        })
+      }
+    }
+
+    // Fall back to OpenStreetMap Nominatim
+    console.log('[API] Falling back to OpenStreetMap Nominatim...')
+    
     const params = new URLSearchParams({
       q: searchQuery,
       format: 'json',
@@ -31,105 +103,62 @@ router.get('/search', async (req: Request, res: Response) => {
       namedetails: '1',
     })
 
-    // Add location bias if provided - prioritize very local results
-    if (location) {
-      const [lat, lng] = (location as string).split(',').map(Number)
-      if (!isNaN(lat) && !isNaN(lng)) {
-        // Use a much smaller radius for local results (5km instead of 10km)
-        const searchRadius = parseFloat(radius as string) || 5000 // 5km default
-        const radiusDeg = searchRadius / 111000 // Convert meters to degrees
-        
-        // Use viewbox to strongly bias search towards location
-        params.append('viewbox', `${lng - radiusDeg},${lat + radiusDeg},${lng + radiusDeg},${lat - radiusDeg}`)
-        params.append('bounded', '1') // Changed to 1 to prioritize within viewbox
-        
-        // Add location parameter for proximity sorting
-        params.append('lat', lat.toString())
-        params.append('lon', lng.toString())
-      }
+    // Add location bias if provided
+    if (lat !== undefined && lng !== undefined) {
+      const searchRadius = parseFloat(radius as string) || 5000
+      const radiusDeg = searchRadius / 111000
+      
+      params.append('viewbox', `${lng - radiusDeg},${lat + radiusDeg},${lng + radiusDeg},${lat - radiusDeg}`)
+      params.append('bounded', '1')
+      params.append('lat', lat.toString())
+      params.append('lon', lng.toString())
     }
 
-    // Add user agent header (required by Nominatim)
-    // Nominatim requires a valid User-Agent identifying your application
-    // Use a more descriptive User-Agent to avoid being blocked
     const userAgent = process.env.NOMINATIM_USER_AGENT || 'SenergyApp/1.0 (https://senergy.app)'
     
     const nominatimUrl = `https://nominatim.openstreetmap.org/search?${params.toString()}`
-    console.log(`[API] Calling Nominatim API: ${nominatimUrl.substring(0, 100)}...`)
+    console.log(`[API] Calling Nominatim API...`)
     
     const fetchStartTime = Date.now()
-    const response = await fetch(
-      nominatimUrl,
-      {
-        headers: {
-          'User-Agent': userAgent,
-          'Accept': 'application/json',
-          'Accept-Language': 'en',
-        },
-      }
-    )
+    const response = await fetch(nominatimUrl, {
+      headers: {
+        'User-Agent': userAgent,
+        'Accept': 'application/json',
+        'Accept-Language': 'en',
+      },
+    })
     const fetchTime = Date.now() - fetchStartTime
-    console.log(`[API] Nominatim API call took ${fetchTime}ms`)
 
     if (!response.ok) {
-      const errorText = await response.text()
-      console.error(`[API] ❌ Nominatim API error (${fetchTime}ms):`, response.status, response.statusText, errorText)
-      
-      // If forbidden, provide helpful error message
-      if (response.status === 403 || response.status === 429) {
-        throw new Error('Geocoding service temporarily unavailable. Please try again in a moment.')
-      }
-      
-      throw new Error(`Geocoding service error: ${response.status} ${response.statusText}`)
+      console.error(`[API] ❌ Nominatim API error: ${response.status}`)
+      throw new Error(`Geocoding service error: ${response.status}`)
     }
 
-    const parseStartTime = Date.now()
     const data = await response.json()
-    const parseTime = Date.now() - parseStartTime
-    console.log(`[API] JSON parse took ${parseTime}ms`)
 
-    // Ensure data is an array
     if (!Array.isArray(data)) {
-      console.error('[API] ❌ Unexpected Nominatim response format:', data)
-      return res.json({
-        success: true,
-        data: [],
-        count: 0,
+      return res.json({ success: true, data: [], count: 0, source: 'openstreetmap' })
+    }
+
+    // Sort by distance if location provided
+    let sortedData = data
+    if (lat !== undefined && lng !== undefined) {
+      sortedData = data.sort((a: any, b: any) => {
+        const distA = Math.sqrt(
+          Math.pow(parseFloat(a.lat) - lat, 2) + Math.pow(parseFloat(a.lon) - lng, 2)
+        )
+        const distB = Math.sqrt(
+          Math.pow(parseFloat(b.lat) - lat, 2) + Math.pow(parseFloat(b.lon) - lng, 2)
+        )
+        return distA - distB
       })
     }
 
-    console.log(`[API] Nominatim returned ${data.length} raw results`)
-
-    // Sort by distance if location provided, then filter
-    const sortStartTime = Date.now()
-    let sortedData = data
-    if (location) {
-      const [lat, lng] = (location as string).split(',').map(Number)
-      if (!isNaN(lat) && !isNaN(lng)) {
-        sortedData = data.sort((a: any, b: any) => {
-          const distA = Math.sqrt(
-            Math.pow(parseFloat(a.lat) - lat, 2) + Math.pow(parseFloat(a.lon) - lng, 2)
-          )
-          const distB = Math.sqrt(
-            Math.pow(parseFloat(b.lat) - lat, 2) + Math.pow(parseFloat(b.lon) - lng, 2)
-          )
-          return distA - distB
-        })
-      }
-    }
-    const sortTime = Date.now() - sortStartTime
-    console.log(`[API] Sorting took ${sortTime}ms`)
-
-    // Filter for places/establishments and format results
-    const filterStartTime = Date.now()
+    // Filter for places/establishments
     const places = sortedData
       .filter((item: any) => {
-        // Filter for places, amenities, shops, etc.
         const itemClass = item.class || ''
         const itemType = item.type || ''
-        const displayName = (item.display_name || '').toLowerCase()
-        
-        // Include restaurants, cafes, bars, pubs, shops, and other amenities
         const validClasses = ['amenity', 'shop', 'tourism', 'leisure', 'craft']
         const validTypes = [
           'restaurant', 'cafe', 'bar', 'pub', 'fast_food', 'food_court',
@@ -137,68 +166,39 @@ router.get('/search', async (req: Request, res: Response) => {
           'cinema', 'theatre', 'museum', 'gallery',
           'park', 'gym', 'sports_centre', 'nightclub', 'club'
         ]
-        
-        return (
-          validClasses.includes(itemClass) ||
-          validTypes.includes(itemType) ||
-          displayName.includes('restaurant') ||
-          displayName.includes('cafe') ||
-          displayName.includes('bar') ||
-          displayName.includes('pub') ||
-          displayName.includes('shop') ||
-          displayName.includes('store') ||
-          displayName.includes('mall') ||
-          displayName.includes('cinema') ||
-          displayName.includes('theater') ||
-          displayName.includes('museum')
-        )
+        return validClasses.includes(itemClass) || validTypes.includes(itemType)
       })
       .slice(0, 20)
-    const filterTime = Date.now() - filterStartTime
-    console.log(`[API] Filtering took ${filterTime}ms, found ${places.length} matching places`)
 
-    // For each place, get stats from our database
-    const statsStartTime = Date.now()
-    console.log(`[API] Fetching stats for ${places.length} places...`)
+    // Enrich with stats
     const placesWithStats = await Promise.all(
       places.map(async (place: any) => {
-        // Create a unique ID from OSM data
         const placeId = place.osm_id ? `osm_${place.osm_type}_${place.osm_id}` : `nominatim_${place.place_id}`
         const stats = await ratingService.getPlaceStats(placeId)
 
-        // Format address with better structure
         const addressParts = []
         if (place.address) {
-          // Street address
           if (place.address.house_number && place.address.road) {
             addressParts.push(`${place.address.house_number} ${place.address.road}`)
           } else if (place.address.road) {
             addressParts.push(place.address.road)
           }
           
-          // City/Town/Village
-          const city = place.address.city || place.address.town || place.address.village || place.address.municipality
+          const city = place.address.city || place.address.town || place.address.village
           if (city) addressParts.push(city)
-          
-          // State/Region
           if (place.address.state) addressParts.push(place.address.state)
-          
-          // Postal code
           if (place.address.postcode) addressParts.push(place.address.postcode)
-          
-          // Country
           if (place.address.country) addressParts.push(place.address.country)
         }
         
-        // Fallback to display_name if no structured address
         const address = addressParts.length > 0 
           ? addressParts.join(', ') 
-          : place.display_name.split(',').slice(0, 3).join(', ') // Take first 3 parts of display_name
+          : place.display_name
 
         return {
           id: placeId,
           name: place.display_name.split(',')[0] || place.name || searchQuery,
-          address: address || place.display_name,
+          address: address,
           location: {
             lat: parseFloat(place.lat),
             lng: parseFloat(place.lon),
@@ -226,16 +226,15 @@ router.get('/search', async (req: Request, res: Response) => {
         }
       })
     )
-    const statsTime = Date.now() - statsStartTime
-    console.log(`[API] Stats fetching took ${statsTime}ms`)
 
     const totalTime = Date.now() - requestStartTime
-    console.log(`[API] ✅ Search complete in ${totalTime}ms (fetch: ${fetchTime}ms, parse: ${parseTime}ms, sort: ${sortTime}ms, filter: ${filterTime}ms, stats: ${statsTime}ms) - returning ${placesWithStats.length} places`)
+    console.log(`[API] ✅ OpenStreetMap search complete in ${totalTime}ms - returning ${placesWithStats.length} places`)
 
     res.json({
       success: true,
       data: placesWithStats,
       count: placesWithStats.length,
+      source: 'openstreetmap',
     })
   } catch (error: any) {
     const totalTime = Date.now() - requestStartTime

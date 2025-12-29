@@ -5,6 +5,40 @@ import { RatingCategory } from '@/types'
 
 const router = Router()
 
+const algoliasearch = require('algoliasearch');
+
+// Initialize Algolia client
+const algoliaClient = algoliasearch(
+  process.env.ALGOLIA_APP_ID,
+  process.env.ALGOLIA_API_KEY
+);
+
+const placesIndex = algoliaClient.initIndex('places');
+
+// In your ratings.routes.ts, add this test endpoint:
+router.get('/test-algolia', async (req: Request, res: Response) => {
+  try {
+    const { hits } = await placesIndex().search('', {
+      aroundLatLng: '45.4208777,-75.6901106',
+      aroundRadius: 25000, // 25km in meters
+      hitsPerPage: 10
+    })
+
+    res.json({
+      success: true,
+      count: hits.length,
+      places: hits
+    })
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    })
+  }
+})
+
+
+
 /**
  * POST /api/ratings
  * Create a new rating

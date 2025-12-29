@@ -21,7 +21,8 @@ import {
   handleVote,
   handleVoteSelect,
   handleViewResults,
-  handleCancel
+  handleCancel,
+  handleAddMemberSelect
 } from './commands/group'
 
 dotenv.config()
@@ -442,6 +443,8 @@ client.on('interactionCreate', async interaction => {
       // Group Voting Select Menus
       if (customId.startsWith('group_vote_select_')) {
         await handleVoteSelect(interaction)
+      } else if (customId.startsWith('group_add_member_select_')) {
+        await handleAddMemberSelect(interaction)
       }
     } catch (error) {
       console.error('Select menu interaction error:', error)

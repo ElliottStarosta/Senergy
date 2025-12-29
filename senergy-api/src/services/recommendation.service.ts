@@ -211,90 +211,120 @@ export class RecommendationService {
   /**
    * Score a place for a group
    */
-  private async scorePlaceForGroup(
-    place: any,
-    memberProfiles: { [key: string]: any },
-    groupMetrics: any,
-    groupLocation: { lat: number; lng: number }
-  ): Promise<(RecommendedPlace & { matchPercentage: number }) | null> {
-    // Get all ratings for this place
-    const ratings = await ratingService.getPlaceRatings(place.id)
+  /**
+ * Score a place for a group - returns both group and individual scores
+ */
+private async scorePlaceForGroup(
+  place: any,
+  memberProfiles: { [key: string]: any },
+  groupMetrics: any,
+  groupLocation: { lat: number; lng: number }
+): Promise<(RecommendedPlace & { matchPercentage: number; memberScores?: Array<{userId: string, displayName: string, score: number, confidence: number}> }) | null> {
+  // Get all ratings for this place
+  const ratings = await ratingService.getPlaceRatings(place.id)
 
-    if (ratings.length === 0) {
-      // No ratings yet - use neutral score with low confidence
-      return {
-        placeId: place.id,
-        placeName: place.name,
-        address: place.address || '',
-        location: place.location,
-        predictedScore: 5.0,
-        confidenceScore: 0.1,
-        matchPercentage: 50,
-        reasoning: 'New place with no ratings yet - could be worth exploring!',
-        categories: this.getNeutralCategories(),
-      }
-    }
-
-    // Calculate distance factor
-    const distance = this.haversineDistance(
-      groupLocation.lat,
-      groupLocation.lng,
-      place.location.lat,
-      place.location.lng
-    )
-    const distanceFactor = Math.max(0, 1 - (distance / 15)) // Penalize places >15km away
-
-    // Calculate individual member scores
-    const memberScores = await Promise.all(
-      Object.values(memberProfiles).map(async (member: any) => {
-        return this.scorePlaceForMember(place.id, member, ratings)
-      })
-    )
-
-    // Calculate group harmony score (how well the place suits everyone)
-    const harmonyScore = this.calculateHarmonyScore(memberScores)
-
-    // Calculate weighted average score
-    const avgPredictedScore = memberScores.reduce((sum, s) => sum + s.score, 0) / memberScores.length
-
-    // Calculate confidence (based on data availability and agreement)
-    const avgConfidence = memberScores.reduce((sum, s) => sum + s.confidence, 0) / memberScores.length
-    const agreementFactor = 1 - (this.calculateStdDev(memberScores.map(s => s.score)) / 10)
-    const dataFactor = Math.min(ratings.length / 20, 1.0)
-    
-    const overallConfidence = (avgConfidence * 0.5 + agreementFactor * 0.3 + dataFactor * 0.2) * distanceFactor
-
-    // Calculate match percentage (how well it fits the group)
-    const matchPercentage = Math.round(
-      (avgPredictedScore / 10) * 0.4 * 100 +
-      harmonyScore * 0.3 * 100 +
-      overallConfidence * 0.3 * 100
-    )
-
-    // Generate reasoning
-    const reasoning = this.generateReasoning(
-      memberScores,
-      harmonyScore,
-      ratings.length,
-      distance,
-      groupMetrics
-    )
-
-    // Calculate average categories
-    const avgCategories = this.calculateAverageCategories(ratings)
-
+  if (ratings.length === 0) {
+    // No ratings yet - use neutral score with low confidence
     return {
       placeId: place.id,
       placeName: place.name,
       address: place.address || '',
       location: place.location,
-      predictedScore: Math.round(avgPredictedScore * 10) / 10,
-      confidenceScore: Math.round(overallConfidence * 100) / 100,
-      matchPercentage,
-      reasoning,
-      categories: avgCategories,
+      predictedScore: 5.0,
+      confidenceScore: 0.1,
+      matchPercentage: 50,
+      reasoning: 'New place with no ratings yet - could be worth exploring!',
+      categories: this.getNeutralCategories(),
+      memberScores: Object.values(memberProfiles).map((member: any) => ({
+        userId: member.userId,
+        displayName: member.displayName,
+        score: 5.0,
+        confidence: 10
+      }))
     }
   }
+
+  // Calculate distance factor
+  const distance = this.haversineDistance(
+    groupLocation.lat,
+    groupLocation.lng,
+    place.location.lat,
+    place.location.lng
+  )
+  const distanceFactor = Math.max(0, 1 - (distance / 15))
+
+  // Calculate individual member scores
+  const memberScores = await Promise.all(
+    Object.values(memberProfiles).map(async (member: any) => {
+      const result = await this.scorePlaceForMember(place.id, member, ratings)
+      return {
+        userId: member.userId,
+        displayName: member.displayName,
+        score: result.score,
+        confidence: Math.round(result.confidence * 100) // Convert to percentage
+      }
+    })
+  )
+
+  // Calculate group harmony score (how well the place suits everyone)
+  const harmonyScore = this.calculateHarmonyScore(memberScores.map(m => ({ score: m.score, confidence: m.confidence / 100 })))
+
+  // Calculate weighted average score
+  const avgPredictedScore = memberScores.reduce((sum, s) => sum + s.score, 0) / memberScores.length
+
+  // IMPROVED CONFIDENCE CALCULATION
+  // Base confidence on data availability (more generous)
+  const dataConfidence = Math.min(ratings.length / 10, 1.0) // Reach 100% at 10 ratings instead of 20
+  
+  // Agreement between members (lower std dev = higher agreement)
+  const scoreStdDev = this.calculateStdDev(memberScores.map(s => s.score))
+  const agreementFactor = Math.max(0, 1 - (scoreStdDev / 5)) // More forgiving
+  
+  // Individual confidence average
+  const avgMemberConfidence = memberScores.reduce((sum, s) => sum + s.confidence, 0) / memberScores.length / 100
+  
+  // Weighted combination (more weight on data availability)
+  const baseConfidence = (
+    dataConfidence * 0.5 +        // 50% weight on having data
+    agreementFactor * 0.25 +       // 25% weight on group agreement
+    avgMemberConfidence * 0.25     // 25% weight on individual confidence
+  )
+  
+  // Apply distance factor but less harshly
+  const overallConfidence = baseConfidence * (0.7 + (distanceFactor * 0.3)) // At least 70% even if far
+
+  // Calculate match percentage
+  const matchPercentage = Math.round(
+    (avgPredictedScore / 10) * 0.5 * 100 +
+    harmonyScore * 0.3 * 100 +
+    overallConfidence * 0.2 * 100
+  )
+
+  // Generate reasoning
+  const reasoning = this.generateReasoning(
+    memberScores.map(m => ({ score: m.score, confidence: m.confidence / 100 })),
+    harmonyScore,
+    ratings.length,
+    distance,
+    groupMetrics
+  )
+
+  // Calculate average categories
+  const avgCategories = this.calculateAverageCategories(ratings)
+
+  return {
+    placeId: place.id,
+    placeName: place.name,
+    address: place.address || '',
+    location: place.location,
+    predictedScore: Math.round(avgPredictedScore * 10) / 10,
+    confidenceScore: Math.round(overallConfidence * 100) / 100,
+    matchPercentage,
+    reasoning,
+    categories: avgCategories,
+    memberScores, // Include individual scores
+  }
+}
 
   /**
    * Generate human-readable reasoning

@@ -103,6 +103,12 @@ export interface RecommendedPlace {
   confidenceScore: number
   reasoning: string
   categories: RatingCategory
+  memberScores?: Array<{
+    userId: string
+    displayName: string
+    score: number
+    confidence: number
+  }>
 }
 
 export interface GroupVotes {

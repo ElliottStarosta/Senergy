@@ -1,9 +1,12 @@
 import { db } from '@/config/firebase'
 import { Rating, RatingCategory, PlaceStats, Place } from '@/types'
+import { placesIndex } from '@/config/algolia'
+
 
 export class RatingService {
   private ratingsCol = db.collection('ratings')
   private placesCol = db.collection('places')
+
 
   /**
    * Create a new rating
@@ -42,6 +45,14 @@ export class RatingService {
 
     // Update place stats
     await this.updatePlaceStats(placeId, placeName, placeAddress, location, overallScore, categories, userAdjustmentFactor, userPersonalityType)
+
+
+    const placeDoc = await this.placesCol.doc(placeId).get()
+  if (placeDoc.exists) {
+    const placeData = { id: placeDoc.id, ...placeDoc.data() } as Place
+    await this.syncPlaceToAlgolia(placeData)
+  }
+
 
     // Update user's lastRatedPlaceLocation and totalRatingsCount
     await this.updateUserRatingStats(userId, location)
@@ -134,6 +145,15 @@ export class RatingService {
     // Recalculate place stats after deletion
     const rating = ratingDoc.data() as Rating
     await this.recalculatePlaceStats(rating.placeId)
+
+    const placeDoc = await this.placesCol.doc(rating.placeId).get()
+    if (!placeDoc.exists) {
+      await this.deletePlaceFromAlgolia(rating.placeId)
+    } else {
+      // Re-sync updated stats to Algolia
+      const placeData = { id: placeDoc.id, ...placeDoc.data() } as Place
+      await this.syncPlaceToAlgolia(placeData)
+    }
   }
 
   /**
@@ -158,13 +178,41 @@ export class RatingService {
     lng: number,
     radiusKm: number = 15
   ): Promise<Place[]> {
-    // Firestore doesn't have native geospatial queries
-    // For now, fetch all places and filter client-side
-    // In production, use Algolia, Firebase Geo or similar
+    const useAlgolia = process.env.ALGOLIA_APP_ID && process.env.ALGOLIA_API_KEY
+  
+    if (useAlgolia) {
+      // Production: Use Algolia geosearch
+      try {
+        console.log(`[Algolia] Searching places near ${lat}, ${lng} within ${radiusKm}km`)
+        
+        const { hits } = await placesIndex().search('', {
+          aroundLatLng: `${lat}, ${lng}`,
+          aroundRadius: radiusKm * 1000, // Convert km to meters
+          hitsPerPage: 100,
+        })
+  
+        console.log(`[Algolia] Found ${hits.length} places`)
+  
+        return hits.map((hit: any) => ({
+          id: hit.objectID,
+          name: hit.name,
+          address: hit.address,
+          location: hit._geoloc, // Algolia stores as _geoloc
+          category: hit.category || 'establishment',
+          stats: hit.stats
+        })) as Place[]
+      } catch (error) {
+        console.error('[Algolia] Search failed, falling back to Firestore:', error)
+        // Fall through to Firestore fallback
+      }
+    }
+  
+    // Development/Fallback: Use Firestore with client-side filtering
+    console.log(`[Firestore] Searching places near ${lat}, ${lng} within ${radiusKm}km`)
     
     const snapshot = await this.placesCol.get()
     
-    return snapshot.docs
+    const places = snapshot.docs
       .map((doc: any) => ({ id: doc.id, ...doc.data() } as Place))
       .filter((place: Place) => {
         const distance = this.haversineDistance(
@@ -180,7 +228,54 @@ export class RatingService {
         const distB = this.haversineDistance(lat, lng, b.location.lat, b.location.lng)
         return distA - distB
       })
+  
+    console.log(`[Firestore] Found ${places.length} places`)
+    return places
   }
+
+  /**
+ * Sync a place to Algolia after rating
+ * Call this after creating/updating a place
+ */
+async syncPlaceToAlgolia(place: Place): Promise<void> {
+  const useAlgolia = process.env.ALGOLIA_APP_ID && process.env.ALGOLIA_API_KEY
+  
+  if (!useAlgolia) return
+
+  try {
+    await placesIndex().saveObject({
+      objectID: place.id,
+      name: place.name,
+      address: place.address,
+      _geoloc: {
+        lat: place.location.lat,
+        lng: place.location.lng
+      },
+      category: place.category || 'establishment',
+      stats: place.stats,
+      lastRatedAt: place.stats.lastRatedAt
+    })
+    console.log(`[Algolia] Synced place: ${place.name}`)
+  } catch (error) {
+    console.error(`[Algolia] Failed to sync place ${place.id}:`, error)
+  }
+}
+
+/**
+ * Delete a place from Algolia
+ */
+async deletePlaceFromAlgolia(placeId: string): Promise<void> {
+  const useAlgolia = process.env.ALGOLIA_APP_ID && process.env.ALGOLIA_API_KEY
+  
+  if (!useAlgolia) return
+
+  try {
+    await placesIndex().deleteObject(placeId)
+    console.log(`[Algolia] Deleted place: ${placeId}`)
+  } catch (error) {
+    console.error(`[Algolia] Failed to delete place ${placeId}:`, error)
+  }
+}
 
   /**
    * Private: Calculate overall score from categories

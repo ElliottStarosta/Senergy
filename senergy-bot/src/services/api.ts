@@ -102,11 +102,11 @@ async getUserToken(discordId: string): Promise<string | null> {
   /**
    * Generate recommendations for group
    */
-  async generateRecommendations(token: string, groupId: string) {
+  async generateRecommendations(token: string, groupId: string, searchRadius: number = 15) {
     try {
       const response = await this.client.post(
         `/api/groups/${groupId}/recommend`,
-        { searchRadius: 15 },
+        { searchRadius },
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -219,6 +219,7 @@ async getUserToken(discordId: string): Promise<string | null> {
     } catch (error: any) {
       throw new Error(error.response?.data?.error || 'Failed to create rating')
     }
+    
   }
 
   /**
