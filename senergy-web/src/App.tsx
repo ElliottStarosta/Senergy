@@ -14,6 +14,7 @@ import { Matching } from '@/pages/Matching'
 import { PlaceDetails } from '@/pages/PlaceDetails'
 import { DiscordBotDocs } from '@/pages/DiscordBotDocs'
 import { DiscordVerify } from '@/pages/DiscordVerify'
+import { APIDocumentation } from '@/pages/APIDocumentation'
 
 
 // Protected Route Component
@@ -104,6 +105,15 @@ const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute>
             <DiscordBotDocs />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/api-docs"
+        element={
+          <ProtectedRoute>
+            <APIDocumentation />
           </ProtectedRoute>
         }
       />
