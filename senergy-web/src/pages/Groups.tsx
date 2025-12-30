@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import axios from 'axios'
 import gsap from 'gsap'
+import Snowfall from 'react-snowfall'
 
 interface GroupMember {
   userId: string
@@ -249,6 +250,11 @@ export const Groups: React.FC = () => {
 
   return (
     <div ref={containerRef} className="min-h-screen bg-gradient-to-br from-neutral-50 via-slate-50 to-blue-50">
+      <Snowfall
+        color="#a44ef2"
+        snowflakeCount={50}
+        style={{ position: 'fixed', width: '100vw', height: '100vh', opacity: 0.2 }}
+      />
       {/* Header */}
       <header className="w-full border-b border-slate-200/50 bg-white/60 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
