@@ -673,7 +673,6 @@ export async function handleVoteSelect(interaction: StringSelectMenuInteraction)
 }
 
 // Finalize voting and determine winner
-// Finalize voting and determine winner
 async function finalizeVoting(
   client: Client,
   channelId: string,
@@ -708,6 +707,26 @@ async function finalizeVoting(
     })
 
   const winner = sortedResults[0]
+  
+  if (session.groupId) {
+    try {
+      // Get token from first member
+      const firstMemberId = Array.from(session.members)[0]
+      const token = await api.getUserToken(firstMemberId)
+      
+      if (token) {
+        await api.finalizeSelection(
+          token,
+          session.groupId,
+          winner.place.placeId,
+          winner.place.placeName
+        )
+        console.log(`[Group] ✅ Synced final place selection to backend for group ${session.groupId}`)
+      }
+    } catch (error) {
+      console.error('[Group] ❌ Failed to sync final place to backend:', error)
+    }
+  }
 
   // Create detailed results embed
   const resultsEmbed = new EmbedBuilder()
