@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import gsap from 'gsap'
+import { useNavigate } from 'react-router-dom'
+
 
 // API Documentation - Easily updateable structure
 const API_DOCUMENTATION = {
@@ -579,6 +581,7 @@ const API_DOCUMENTATION = {
 }
 
 export const APIDocumentation: React.FC = () => {
+  const navigate = useNavigate()
   const containerRef = useRef<HTMLDivElement>(null)
   const sidebarRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -711,18 +714,13 @@ export const APIDocumentation: React.FC = () => {
               <h1 className="text-lg font-bold text-slate-900">Senergy API</h1>
             </div>
           </div>
-          <a 
-            href="/" 
-            className="px-4 py-2 rounded-xl text-slate-700 text-sm font-semibold border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all duration-300 hover:scale-105 hover:shadow-md"
-            onMouseEnter={(e) => {
-              gsap.to(e.currentTarget, { x: -5, duration: 0.3, ease: 'power2.out' })
-            }}
-            onMouseLeave={(e) => {
-              gsap.to(e.currentTarget, { x: 0, duration: 0.3, ease: 'power2.out' })
-            }}
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="px-4 py-2 rounded-xl text-slate-700 text-sm font-semibold border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all hover:scale-105"
           >
-            ← Back
-          </a>
+            <i className="fas fa-arrow-left mr-2" />
+            Dashboard
+          </button>
         </div>
       </header>
 

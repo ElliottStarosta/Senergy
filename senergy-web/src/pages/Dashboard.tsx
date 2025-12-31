@@ -167,8 +167,8 @@ export const Dashboard: React.FC = () => {
         style={{ position: 'fixed', width: '100vw', height: '100vh', opacity: 0.5 }}
       />
       {/* Header */}
-      <header className="w-full border-b border-slate-200/70 bg-white/80 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+      <header className="w-full border-b border-slate-200/70 bg-white/80 backdrop-blur-md relative z-50">
+      <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center">
               <i className="fas fa-compass text-white" />
@@ -179,27 +179,64 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            {/* Docs Dropdown */}
+            <div className="group relative">
+              <button className="w-10 h-10 rounded-xl border-2 border-slate-200 hover:border-indigo-300 hover:bg-slate-50 transition-all duration-300 flex items-center justify-center">
+                <i className="fas fa-book text-slate-600 group-hover:text-indigo-600 transition-colors duration-300" />
+              </button>
+
+              {/* Dropdown Menu */}
+              <div className="absolute right-0 top-12 w-48 bg-white rounded-xl shadow-lg border border-slate-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100]">
+              <button
+                  onClick={() => navigate('/discord-bot-docs')}
+                  className="w-full px-4 py-3 text-left hover:bg-slate-50 rounded-t-xl transition flex items-center gap-3 group/item"
+                >
+                  <i className="fab fa-discord text-[#5865F2] text-lg group-hover/item:scale-110 transition-transform" />
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Discord Bot</p>
+                    <p className="text-xs text-slate-500">Bot commands</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => navigate('/api-docs')}
+                  className="w-full px-4 py-3 text-left hover:bg-slate-50 rounded-t-xl transition flex items-center gap-3 group/item"
+                >
+                  <i className="fas fa-code text-pink-600 text-lg group-hover/item:scale-110 transition-transform" />
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">API Docs</p>
+                    <p className="text-xs text-slate-500">Developer guide</p>
+                  </div>
+                </button>
+                
+              </div>
+            </div>
+
+            {/* Rate Button - Icon Only */}
             <button
               onClick={() => navigate('/rate')}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-semibold hover:shadow-lg transition"
+              className="w-10 h-10 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:shadow-lg transition-all duration-300 flex items-center justify-center group"
+              title="Rate a place"
             >
-              <i className="fas fa-star mr-2" />
-              Rate a place
+              <i className="fas fa-star group-hover:rotate-12 transition-transform duration-300" />
             </button>
+
+            {/* Groups Button - Icon Only */}
             <button
               onClick={() => navigate('/groups')}
-              className="px-4 py-2 rounded-xl border-2 border-indigo-200 text-indigo-600 text-sm font-semibold hover:bg-indigo-50 transition"
+              className="w-10 h-10 rounded-xl border-2 border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 transition-all duration-300 flex items-center justify-center group"
+              title="Groups"
             >
-              <i className="fas fa-users mr-2" />
-              Groups
+              <i className="fas fa-users group-hover:scale-110 transition-transform duration-300" />
             </button>
+
+            {/* Sign Out Button - Icon Only */}
             <button
               onClick={handleLogout}
-              className="px-4 py-2 rounded-xl text-slate-700 text-sm font-semibold border border-slate-200 hover:bg-slate-50 transition"
+              className="w-10 h-10 rounded-xl text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all duration-300 flex items-center justify-center group"
+              title="Sign out"
             >
-              <i className="fas fa-sign-out-alt mr-2" />
-              Sign out
+              <i className="fas fa-sign-out-alt group-hover:-translate-x-0.5 transition-transform duration-300" />
             </button>
           </div>
         </div>
@@ -413,7 +450,7 @@ export const Dashboard: React.FC = () => {
           </button>
         </div>
 
-        
+
       </main>
     </div>
   )
