@@ -698,7 +698,7 @@ export const APIDocumentation: React.FC = () => {
 
   const categories = Object.entries(API_DOCUMENTATION).map(([key, value]) => ({ id: key, ...value }))
   const currentCategory = API_DOCUMENTATION[activeCategory as keyof typeof API_DOCUMENTATION]
-  const currentEndpoint = currentCategory?.endpoints[activeEndpoint]
+  // const currentEndpoint = currentCategory?.endpoints[activeEndpoint]
 
   return (
     <div ref={containerRef} className="min-h-screen bg-gradient-to-br from-neutral-50 via-slate-50 to-blue-50">
