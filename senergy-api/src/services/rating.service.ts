@@ -185,7 +185,12 @@ export class RatingService {
       try {
         console.log(`[Algolia] Searching places near ${lat}, ${lng} within ${radiusKm}km`)
         
-        const { hits } = await placesIndex().search('', {
+        const index = placesIndex();
+        if (!index) {
+          throw new Error("Algolia creds not configured")
+        }
+
+        const { hits } = await index.search('', {
           aroundLatLng: `${lat}, ${lng}`,
           aroundRadius: radiusKm * 1000, // Convert km to meters
           hitsPerPage: 100,
@@ -240,10 +245,14 @@ export class RatingService {
 async syncPlaceToAlgolia(place: Place): Promise<void> {
   const useAlgolia = process.env.ALGOLIA_APP_ID && process.env.ALGOLIA_API_KEY
   
-  if (!useAlgolia) return
+  const index = placesIndex();
+
+  if (!useAlgolia || !index) {
+    throw new Error("Algolia credentials missing")
+  }
 
   try {
-    await placesIndex().saveObject({
+    await index.saveObject({
       objectID: place.id,
       name: place.name,
       address: place.address,
@@ -266,11 +275,14 @@ async syncPlaceToAlgolia(place: Place): Promise<void> {
  */
 async deletePlaceFromAlgolia(placeId: string): Promise<void> {
   const useAlgolia = process.env.ALGOLIA_APP_ID && process.env.ALGOLIA_API_KEY
+  const index = placesIndex();
   
-  if (!useAlgolia) return
+  if (!useAlgolia || !index) {
+    throw new Error("Algolia credentials not configured")
+  }
 
   try {
-    await placesIndex().deleteObject(placeId)
+    await index.deleteObject(placeId)
     console.log(`[Algolia] Deleted place: ${placeId}`)
   } catch (error) {
     console.error(`[Algolia] Failed to delete place ${placeId}:`, error)
