@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import gsap from 'gsap'
+import { DashboardReturnBtn } from '@/components/common/DashboardReturnBtn'
 
 export const DiscordBotDocs: React.FC = () => {
   const navigate = useNavigate()
@@ -640,15 +641,8 @@ export const DiscordBotDocs: React.FC = () => {
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Discord Bot</p>
               <h1 className="text-lg font-bold text-slate-900">Documentation</h1>
             </div>
-          </div>
-          
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="px-4 py-2 rounded-xl text-slate-700 text-sm font-semibold border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all hover:scale-105"
-          >
-            <i className="fas fa-arrow-left mr-2" />
-            Dashboard
-          </button>
+          </div>     
+        <DashboardReturnBtn />
         </div>
       </header>
 

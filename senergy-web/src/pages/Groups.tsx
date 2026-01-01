@@ -4,6 +4,7 @@ import { useAuth } from '@/context/AuthContext'
 import axios from 'axios'
 import gsap from 'gsap'
 import Snowfall from 'react-snowfall'
+import { DashboardReturnBtn } from '@/components/common/DashboardReturnBtn'
 
 interface GroupMember {
   userId: string
@@ -91,9 +92,9 @@ export const Groups: React.FC = () => {
   const handleHeaderIconRef = (element: HTMLDivElement | null) => {
     if (element && !headerIconRef.current) {
       headerIconRef.current = element;
-      
+
       console.log('Element mounted, creating animation...');
-      
+
       gsap.to(element, {
         y: -6,
         duration: 2,
@@ -274,15 +275,7 @@ export const Groups: React.FC = () => {
               <h1 className="text-xl font-black text-slate-900">Your Groups</h1>
             </div>
           </div>
-
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="group relative px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-700 border border-slate-200/60 hover:border-slate-300 hover:bg-slate-50/80 transition-all duration-300 flex items-center gap-2 overflow-hidden"
-          >
-            <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-full group-hover:translate-x-0 transition-transform duration-500" />
-            <i className="fas fa-arrow-left text-sm group-hover:-translate-x-1 transition-transform duration-300" />
-            <span>Dashboard</span>
-          </button>
+          <DashboardReturnBtn/>
         </div>
       </header>
 
