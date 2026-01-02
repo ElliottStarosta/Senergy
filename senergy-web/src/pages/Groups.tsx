@@ -488,9 +488,9 @@ export const Groups: React.FC = () => {
                       {getStatusLabel(currentGroup.status)}
                     </p>
                   </div>
-                  <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${getStatusColor(currentGroup.status)} opacity-20 flex items-center justify-center`}>
-                    <i className="fas fa-circle-check text-lg" />
-                  </div>
+                  <div className={`w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center`}>
+  <i className="fas fa-circle-check text-lg text-green-800" />
+</div>
                 </div>
               </div>
             </div>
