@@ -21,6 +21,7 @@ const generateCodeExample = (endpoint: any, language: string) => {
     case 'curl':
       return endpoint.example
 
+
     case 'python':
       return generatePythonCode(endpoint, baseUrl)
 
@@ -219,78 +220,288 @@ const generateCppCode = (endpoint: any, baseUrl: string) => {
   return code
 }
 
-const getCodeComments = (endpoint: any, language: string) => {
+const getCodeComments = (endpoint: any, language: string): { [key: number]: string } => {
   const comments: { [key: number]: string } = {}
-  const requiresAuth = endpoint.headers?.some((h: any) => h.name === 'Authorization')
-  const hasBody = endpoint.parameters.length > 0 && ['POST', 'PUT'].includes(endpoint.method)
 
-  switch (language) {
-    case 'curl':
-      comments[0] = '# Make a POST request to the API'
-      if (requiresAuth) {
-        comments[1] = '# Include authorization header with JWT token'
-      }
-      if (hasBody) {
-        comments[2] = '# Send JSON data in request body'
-      }
-      break
+  // Get the actual code to analyze line by line
+  const code = generateCodeExample(endpoint, language)
+  const lines = code.split('\n')
 
-    case 'python':
-      comments[0] = '# Import the requests library for HTTP operations'
-      comments[1] = '# Import json module for data serialization'
-      if (requiresAuth) {
-        comments[3] = '# Replace with your actual JWT token from login'
-        comments[4] = '# Set up headers with authentication'
-      }
-      if (hasBody) {
-        const dataLineIndex = requiresAuth ? 7 : 3
-        comments[dataLineIndex] = '# Prepare the request payload as a dictionary'
-      }
-      const responseLineIndex = requiresAuth && hasBody ? 12 : requiresAuth ? 8 : hasBody ? 8 : 4
-      comments[responseLineIndex] = '# Send the HTTP request to the API endpoint'
-      comments[responseLineIndex + 2] = '# Check if the request was successful'
-      break
-
-    case 'javascript':
-      comments[0] = '// Using the modern Fetch API for HTTP requests'
-      if (requiresAuth) {
-        comments[1] = '// Store your JWT authentication token'
-      }
-      if (hasBody) {
-        const dataLineIndex = requiresAuth ? 3 : 1
-        comments[dataLineIndex] = '// Create the request body object'
-      }
-      const fetchLineIndex = requiresAuth && hasBody ? 8 : requiresAuth ? 6 : hasBody ? 6 : 2
-      comments[fetchLineIndex] = '// Make the API request with configuration'
-      comments[fetchLineIndex + 6] = '// Handle successful response'
-      break
-
-    case 'java':
-      comments[0] = '// Java 11+ HTTP Client for modern async requests'
-      comments[1] = '// Gson library for JSON serialization/deserialization'
-      comments[2] = '// Standard Java collections for data structures'
-      if (requiresAuth) {
-        comments[5] = '// Your authentication token from the login endpoint'
-      }
-      if (hasBody) {
-        const dataLineIndex = requiresAuth ? 7 : 5
-        comments[dataLineIndex] = '// Build the request payload'
-      }
-      break
-
-    case 'cpp':
-      comments[0] = '// Standard input/output operations'
-      comments[1] = '// libcurl library for HTTP requests'
-      comments[2] = '// String handling utilities'
-      comments[4] = '// Callback function to handle response data'
-      comments[11] = '// Initialize libcurl session'
-      comments[14] = '// Set the target URL'
-      if (requiresAuth) {
-        comments[19] = '// Add authorization header'
-      }
-      comments[comments[19] ? 22 : 20] = '// Execute the HTTP request'
-      break
+  // Helper function to find parameter description
+  const getParamDesc = (paramName: string): string => {
+    const param = endpoint.parameters.find((p: any) => p.name === paramName)
+    return param ? param.description : `${paramName} parameter`
   }
+
+  lines.forEach((line: string, index: number) => {
+    const trimmed = line.trim()
+    
+    // Skip empty lines and comment lines
+    if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('#') || trimmed.startsWith('/*') || trimmed.startsWith('*') || trimmed.startsWith('*/')) {
+      return
+    }
+
+    // Language-specific parsing
+    switch (language) {
+      case 'curl':
+        if (trimmed.startsWith('curl -X')) {
+          comments[index] = `Execute ${endpoint.method} request to ${endpoint.name} endpoint`
+        } else if (trimmed.includes('-H "Authorization:')) {
+          comments[index] = 'Include JWT bearer token for authentication'
+        } else if (trimmed.includes('-H "Content-Type:')) {
+          comments[index] = 'Specify JSON format for request data'
+        } else if (trimmed.includes('-d \'') || trimmed.includes('-d "')) {
+          comments[index] = `Send request payload with ${endpoint.name.toLowerCase()} data`
+        }
+        break
+
+      case 'python':
+        if (trimmed.startsWith('import requests')) {
+          comments[index] = 'Import HTTP library for API requests'
+        } else if (trimmed.startsWith('import json')) {
+          comments[index] = 'Import JSON module for data handling'
+        } else if (trimmed.includes('token = ')) {
+          comments[index] = 'Store JWT authentication token from login'
+        } else if (trimmed === 'headers = {') {
+          comments[index] = 'Configure request headers dictionary'
+        } else if (trimmed.includes('"Authorization":') && trimmed.includes('Bearer')) {
+          comments[index] = 'Add bearer token to authorization header'
+        } else if (trimmed.includes('"Content-Type":') && trimmed.includes('json')) {
+          comments[index] = 'Set content type to application/json'
+        } else if (trimmed === '},') {
+          comments[index] = 'Close headers configuration'
+        } else if (trimmed === 'data = {') {
+          comments[index] = `Build request payload for ${endpoint.name.toLowerCase()}`
+        } else if (trimmed.includes(': "example_')) {
+          // Extract parameter name from the line
+          const match = trimmed.match(/"(\w+)":\s*"example_/)
+          if (match) {
+            comments[index] = getParamDesc(match[1])
+          }
+        } else if (trimmed.includes(': []')) {
+          const match = trimmed.match(/"(\w+)":\s*\[\]/)
+          if (match) {
+            comments[index] = getParamDesc(match[1])
+          }
+        } else if (trimmed.includes(': {}')) {
+          const match = trimmed.match(/"(\w+)":\s*\{\}/)
+          if (match) {
+            comments[index] = getParamDesc(match[1])
+          }
+        } else if (trimmed.includes(': None')) {
+          const match = trimmed.match(/"(\w+)":\s*None/)
+          if (match) {
+            comments[index] = getParamDesc(match[1])
+          }
+        } else if (trimmed === '}') {
+          comments[index] = 'Close data payload dictionary'
+        } else if (trimmed.startsWith('response = requests.get(')) {
+          comments[index] = `Send GET request to ${endpoint.name} endpoint`
+        } else if (trimmed.startsWith('response = requests.post(')) {
+          comments[index] = `Send POST request to ${endpoint.name} endpoint`
+        } else if (trimmed.startsWith('response = requests.put(')) {
+          comments[index] = `Send PUT request to ${endpoint.name} endpoint`
+        } else if (trimmed.startsWith('response = requests.delete(')) {
+          comments[index] = `Send DELETE request to ${endpoint.name} endpoint`
+        } else if (trimmed.startsWith('f"http')) {
+          comments[index] = 'Specify target URL endpoint'
+        } else if (trimmed.includes('json=data')) {
+          comments[index] = 'Include JSON payload in request body'
+        } else if (trimmed.includes('headers=headers')) {
+          comments[index] = 'Attach configured headers to request'
+        } else if (trimmed === ')') {
+          comments[index] = 'Complete the request call'
+        } else if (trimmed.includes('if response.status_code ==')) {
+          comments[index] = `Check if response status is ${endpoint.statusCodes[0].code} (${endpoint.statusCodes[0].message.toLowerCase()})`
+        } else if (trimmed.includes('result = response.json()')) {
+          comments[index] = 'Parse JSON response into Python dictionary'
+        } else if (trimmed.includes('print("Success"')) {
+          comments[index] = 'Display successful operation result'
+        } else if (trimmed.startsWith('else:')) {
+          comments[index] = 'Handle non-success responses'
+        } else if (trimmed.includes('print(f"Error')) {
+          comments[index] = 'Display error status and message'
+        }
+        break
+
+      case 'javascript':
+        if (trimmed.includes('// Using fetch')) {
+          return
+        } else if (trimmed.includes('const token =')) {
+          comments[index] = 'Store JWT authentication token'
+        } else if (trimmed === 'const data = {') {
+          comments[index] = `Build request payload for ${endpoint.name.toLowerCase()}`
+        } else if (trimmed.includes(': "example_')) {
+          const match = trimmed.match(/(\w+):\s*"example_/)
+          if (match) {
+            comments[index] = getParamDesc(match[1])
+          }
+        } else if (trimmed.includes(': []')) {
+          const match = trimmed.match(/(\w+):\s*\[\]/)
+          if (match) {
+            comments[index] = getParamDesc(match[1])
+          }
+        } else if (trimmed.includes(': {}')) {
+          const match = trimmed.match(/(\w+):\s*\{\}/)
+          if (match) {
+            comments[index] = getParamDesc(match[1])
+          }
+        } else if (trimmed.includes(': null')) {
+          const match = trimmed.match(/(\w+):\s*null/)
+          if (match) {
+            comments[index] = getParamDesc(match[1])
+          }
+        } else if (trimmed === '};') {
+          comments[index] = 'Close data object'
+        } else if (trimmed.includes('const response = await fetch(')) {
+          comments[index] = `Send async request to ${endpoint.name} endpoint`
+        } else if (trimmed.includes('method: "')) {
+          comments[index] = `Set HTTP method to ${endpoint.method}`
+        } else if (trimmed === 'headers: {') {
+          comments[index] = 'Configure request headers'
+        } else if (trimmed.includes('"Authorization":') && trimmed.includes('Bearer')) {
+          comments[index] = 'Add bearer token for authentication'
+        } else if (trimmed.includes('"Content-Type":') && trimmed.includes('json')) {
+          comments[index] = 'Set content type to application/json'
+        } else if (trimmed === '},') {
+          comments[index] = 'Close headers object'
+        } else if (trimmed.includes('body: JSON.stringify(data)')) {
+          comments[index] = 'Convert data object to JSON string for body'
+        } else if (trimmed === '});') {
+          comments[index] = 'Complete fetch configuration'
+        } else if (trimmed.includes('if (response.ok)')) {
+          comments[index] = 'Check if request succeeded (status 200-299)'
+        } else if (trimmed.includes('const result = await response.json()')) {
+          comments[index] = 'Parse response body as JSON'
+        } else if (trimmed.includes('console.log("Success"')) {
+          comments[index] = 'Log successful response data'
+        } else if (trimmed.includes('} else {')) {
+          comments[index] = 'Handle error responses'
+        } else if (trimmed.includes('console.error("Error"')) {
+          comments[index] = 'Log error status and response text'
+        } else if (trimmed === '}') {
+          comments[index] = 'Close conditional block'
+        }
+        break
+
+      case 'java':
+        if (trimmed.startsWith('import java.net.http')) {
+          comments[index] = 'Import HTTP client library'
+        } else if (trimmed.startsWith('import java.net.URI')) {
+          comments[index] = 'Import URI handling class'
+        } else if (trimmed.startsWith('import com.google.gson')) {
+          comments[index] = 'Import Gson for JSON serialization'
+        } else if (trimmed.startsWith('import java.util.HashMap')) {
+          comments[index] = 'Import HashMap for data storage'
+        } else if (trimmed.includes('public class APIExample')) {
+          comments[index] = 'Define main API example class'
+        } else if (trimmed.includes('public static void main(')) {
+          comments[index] = 'Main method entry point'
+        } else if (trimmed.includes('HttpClient client = ')) {
+          comments[index] = 'Create HTTP client instance'
+        } else if (trimmed.includes('String token = ')) {
+          comments[index] = 'Store JWT authentication token'
+        } else if (trimmed.includes('HashMap<String, Object> data = ')) {
+          comments[index] = `Initialize data map for ${endpoint.name.toLowerCase()}`
+        } else if (trimmed.includes('data.put(')) {
+          const match = trimmed.match(/data\.put\("(\w+)",/)
+          if (match) {
+            comments[index] = getParamDesc(match[1])
+          }
+        } else if (trimmed.includes('String json = new Gson()')) {
+          comments[index] = 'Serialize HashMap to JSON string'
+        } else if (trimmed.includes('HttpRequest.Builder builder = ')) {
+          comments[index] = 'Initialize HTTP request builder'
+        } else if (trimmed.includes('.uri(URI.create(')) {
+          comments[index] = 'Set target endpoint URL'
+        } else if (trimmed.includes('.header("Authorization"')) {
+          comments[index] = 'Add authorization header with bearer token'
+        } else if (trimmed.includes('.header("Content-Type"')) {
+          comments[index] = 'Set content type to application/json'
+        } else if (trimmed.includes(`.${endpoint.method}(HttpRequest.BodyPublishers`)) {
+          comments[index] = `Set request method to ${endpoint.method} with body`
+        } else if (trimmed.includes('HttpResponse<String> response = ')) {
+          comments[index] = 'Execute request and capture response'
+        } else if (trimmed.includes('builder.build()')) {
+          comments[index] = 'Build the HTTP request'
+        } else if (trimmed.includes('HttpResponse.BodyHandlers.ofString()')) {
+          comments[index] = 'Handle response as string'
+        } else if (trimmed.includes(');')) {
+          comments[index] = 'Close method call'
+        } else if (trimmed.includes('System.out.println("Status"')) {
+          comments[index] = 'Print HTTP status code'
+        } else if (trimmed.includes('System.out.println("Response"')) {
+          comments[index] = 'Print response body content'
+        } else if (trimmed === '}') {
+          comments[index] = 'Close block'
+        }
+        break
+
+      case 'cpp':
+        if (trimmed.startsWith('#include <iostream>')) {
+          comments[index] = 'Include standard I/O library'
+        } else if (trimmed.startsWith('#include <curl/curl.h>')) {
+          comments[index] = 'Include libcurl for HTTP requests'
+        } else if (trimmed.startsWith('#include <string>')) {
+          comments[index] = 'Include string handling library'
+        } else if (trimmed.includes('size_t WriteCallback(')) {
+          comments[index] = 'Define callback function for response data'
+        } else if (trimmed.includes('size_t totalSize = ')) {
+          comments[index] = 'Calculate total size of received data'
+        } else if (trimmed.includes('output->append(')) {
+          comments[index] = 'Append received data to output string'
+        } else if (trimmed.includes('return totalSize;')) {
+          comments[index] = 'Return number of bytes processed'
+        } else if (trimmed === '}') {
+          comments[index] = 'Close function/block'
+        } else if (trimmed.includes('int main()')) {
+          comments[index] = 'Main program entry point'
+        } else if (trimmed.includes('CURL* curl = curl_easy_init()')) {
+          comments[index] = 'Initialize libcurl session'
+        } else if (trimmed.includes('std::string response;')) {
+          comments[index] = 'Declare string to store response'
+        } else if (trimmed.includes('if (curl)')) {
+          comments[index] = 'Check if curl initialized successfully'
+        } else if (trimmed.includes('curl_easy_setopt(curl, CURLOPT_URL,')) {
+          comments[index] = `Set target URL for ${endpoint.name}`
+        } else if (trimmed.includes('curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,')) {
+          comments[index] = 'Set callback function for response'
+        } else if (trimmed.includes('curl_easy_setopt(curl, CURLOPT_WRITEDATA,')) {
+          comments[index] = 'Pass response string to callback'
+        } else if (trimmed.includes('curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST,')) {
+          comments[index] = `Set HTTP method to ${endpoint.method}`
+        } else if (trimmed.includes('struct curl_slist* headers = NULL;')) {
+          comments[index] = 'Initialize headers linked list'
+        } else if (trimmed.includes('headers = curl_slist_append(headers, "Authorization:')) {
+          comments[index] = 'Add authorization header with bearer token'
+        } else if (trimmed.includes('headers = curl_slist_append(headers, "Content-Type:')) {
+          comments[index] = 'Add content-type header for JSON'
+        } else if (trimmed.includes('std::string jsonData = ')) {
+          comments[index] = 'Define JSON payload string'
+        } else if (trimmed.includes('curl_easy_setopt(curl, CURLOPT_POSTFIELDS,')) {
+          comments[index] = 'Set request body data'
+        } else if (trimmed.includes('curl_easy_setopt(curl, CURLOPT_HTTPHEADER,')) {
+          comments[index] = 'Apply headers to request'
+        } else if (trimmed.includes('CURLcode res = curl_easy_perform(curl)')) {
+          comments[index] = 'Execute HTTP request'
+        } else if (trimmed.includes('if (res != CURLE_OK)')) {
+          comments[index] = 'Check if request failed'
+        } else if (trimmed.includes('std::cerr <<')) {
+          comments[index] = 'Print error message to stderr'
+        } else if (trimmed.includes('} else {')) {
+          comments[index] = 'Handle successful request'
+        } else if (trimmed.includes('std::cout <<')) {
+          comments[index] = 'Print response data to stdout'
+        } else if (trimmed.includes('curl_slist_free_all(headers)')) {
+          comments[index] = 'Free headers memory'
+        } else if (trimmed.includes('curl_easy_cleanup(curl)')) {
+          comments[index] = 'Cleanup curl session'
+        } else if (trimmed.includes('return 0;')) {
+          comments[index] = 'Return success exit code'
+        }
+        break
+    }
+  })
 
   return comments
 }
