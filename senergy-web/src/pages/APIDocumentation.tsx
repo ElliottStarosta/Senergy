@@ -1141,7 +1141,6 @@ const CodeBlock: React.FC<{ endpoint: any; endpointIndex: number }> = ({ endpoin
 
     setTimeout(() => setCopiedCode(false), 2000)
   }
-  GOOn
 
   return (
     <div className="space-y-4">
