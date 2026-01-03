@@ -9,7 +9,7 @@ import { configureAlgoliaIndex } from './config/algolia'
 import { createServer } from './server'
 
 const PORT = parseInt(process.env.PORT || '3001', 10)
-goon
+
 const server = createServer()
 
 server.listen(PORT, async () => {
