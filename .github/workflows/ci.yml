@@ -35,4 +35,4 @@ jobs:
       - name: Run dev build check (ignore env/runtime errors)
         working-directory: ${{ matrix.project }}
         run: |
-          npm run dev || true
+          timeout 10s npm run dev || true
