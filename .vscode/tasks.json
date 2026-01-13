@@ -1,0 +1,58 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "senergy-api",
+      "type": "shell",
+      "command": "npm install && npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/senergy-api",
+        "shell": {
+          "executable": "cmd.exe",
+          "args": ["/d", "/c"]
+        }
+      },
+      "isBackground": true,
+      "presentation": {
+        "panel": "new"
+      }
+    },
+    {
+      "label": "senergy-web",
+      "type": "shell",
+      "command": "npm install && npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/senergy-web",
+        "shell": {
+          "executable": "cmd.exe",
+          "args": ["/d", "/c"]
+        }
+      },
+      "isBackground": true,
+      "presentation": {
+        "panel": "new"
+      }
+    },
+    {
+      "label": "senergy-bot",
+      "type": "shell",
+      "command": "npm install && npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/senergy-bot",
+        "shell": {
+          "executable": "cmd.exe",
+          "args": ["/d", "/c"]
+        }
+      },
+      "isBackground": true,
+      "presentation": {
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Start All Dev Servers",
+      "dependsOn": ["senergy-api", "senergy-web", "senergy-bot"],
+      "dependsOrder": "parallel"
+    }
+  ]
+}
