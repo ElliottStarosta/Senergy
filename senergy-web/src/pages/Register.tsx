@@ -4,7 +4,7 @@ import { useAuth } from '@/context/AuthContext'
 import gsap from 'gsap'
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 import { auth } from '@/services/firebase'
-import axios from 'axios'
+import api from '@/api/config'
 
 export const Register: React.FC = () => {
   const navigate = useNavigate()
@@ -233,7 +233,7 @@ export const Register: React.FC = () => {
       console.log('[Login] Got Firebase ID token, sending to backend...')
 
       // Send token to backend
-      const response = await axios.post('/api/auth/google', { token: firebaseIdToken })
+      const response = await api.post('/api/auth/google', { token: firebaseIdToken })
 
       console.log('[Login] Backend response received, token:', response.data.token.substring(0, 50) + '...')
 
@@ -244,7 +244,7 @@ export const Register: React.FC = () => {
       // Manually verify the token with the backend
       console.log('[Login] Verifying token with backend...')
       try {
-        const verifyResponse = await axios.get('/api/auth/verify', {
+        const verifyResponse = await api.get('/api/auth/verify', {
           headers: { Authorization: `Bearer ${response.data.token}` },
         })
         
@@ -404,7 +404,7 @@ export const Register: React.FC = () => {
         if (token) {
           try {
             console.log('🔗 Attempting to link Discord ID...')
-            const response = await axios.post('/api/auth/discord/link', 
+            const response = await api.post('/api/auth/discord/link', 
               { discordId: pendingDiscordId },
               { 
                 headers: { 

@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { User, AuthState } from '@/types'
 import axios from 'axios'
+import { api } from '@/api/config' 
+import { APIDocumentation } from '@/pages/APIDocumentation'
 
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<void>
@@ -30,11 +32,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (token) {
         try {
           console.log('[AuthContext] Verifying token on mount...')
-          const axiosInstance = axios.create({
-            timeout: 5000,
-          })
-
-          const response = await axiosInstance.get('/api/auth/verify', {
+          
+          const response = await api.get('/api/auth/verify', {
             headers: { Authorization: `Bearer ${token}` },
           })
 
