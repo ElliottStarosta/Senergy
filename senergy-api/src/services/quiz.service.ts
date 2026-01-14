@@ -10,16 +10,19 @@ interface QuizQuestionDef {
 }
 
 const QUIZ_QUESTIONS: QuizQuestionDef[] = [
-  { id: 1, text: 'Large parties energize me', weight: 3, reverse: false },
-  { id: 2, text: 'I prefer quiet, intimate gatherings', weight: 3, reverse: true },
-  { id: 3, text: 'I need alone time after social events', weight: 2, reverse: true },
-  { id: 4, text: 'I am comfortable being the center of attention', weight: 2, reverse: false },
-  { id: 5, text: 'I prefer deep conversations over small talk', weight: 2, reverse: true },
-  { id: 6, text: 'I enjoy spontaneous social activities', weight: 1, reverse: false },
-  { id: 7, text: 'I recharge by being around people', weight: 3, reverse: false },
-  { id: 8, text: 'I think out loud when making decisions', weight: 1, reverse: false },
-  { id: 9, text: 'I am energized by new social environments', weight: 2, reverse: false },
-  { id: 10, text: 'I prefer working in teams vs alone', weight: 1, reverse: false },
+  // Extroverted statements (agree = extrovert, disagree = introvert)
+  { id: 1, text: 'I feel energized and excited when attending large parties', weight: 3, reverse: false },
+  { id: 2, text: 'I am comfortable being the center of attention', weight: 2, reverse: false },
+  { id: 3, text: 'I recharge by being around people', weight: 3, reverse: false },
+  { id: 4, text: 'I enjoy meeting new people frequently', weight: 2, reverse: false },
+  { id: 5, text: 'I think out loud when making decisions', weight: 1, reverse: false },
+  
+  // Introverted statements (agree = introvert, disagree = extrovert)  
+  { id: 6, text: 'I prefer quiet, intimate gatherings', weight: 3, reverse: true },
+  { id: 7, text: 'I need alone time to recharge after social events', weight: 3, reverse: true },
+  { id: 8, text: 'I prefer deep one-on-one conversations over group discussions', weight: 2, reverse: true },
+  { id: 9, text: 'I feel drained after spending time in large groups', weight: 2, reverse: true },
+  { id: 10, text: 'I prefer working independently rather than in teams', weight: 1, reverse: true },
 ]
 
 export class QuizService {

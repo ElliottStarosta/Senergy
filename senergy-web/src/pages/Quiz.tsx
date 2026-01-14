@@ -13,18 +13,30 @@ interface QuizQuestion {
 
 // Fallback questions if API is not yet wired or returns empty
 const DEFAULT_QUESTIONS: QuizQuestion[] = [
-  { id: 1, text: 'I feel energized after spending time in large groups.', weight: 2 },
-  { id: 2, text: 'I prefer quiet, low-key hangouts over big events.', weight: 2, reverse: true },
-  { id: 3, text: 'Spontaneous plans excite me more than they stress me out.', weight: 1 },
-  { id: 4, text: 'I need alone time to recharge after social activities.', weight: 2, reverse: true },
-  { id: 5, text: 'I enjoy meeting new people in unfamiliar places.', weight: 2 },
-  { id: 6, text: 'I would rather have a deep 1:1 conversation than be in a loud crowd.', weight: 1, reverse: true },
-  { id: 7, text: 'Busy, high-energy venues are my ideal kind of spot.', weight: 2 },
-  { id: 8, text: 'I often leave events earlier than others because I feel drained.', weight: 1, reverse: true },
-  { id: 9, text: 'I like being the one who suggests and organizes group plans.', weight: 1 },
-  { id: 10, text: 'I feel uncomfortable when all attention is on me.', weight: 1, reverse: true },
+   // Extroverted statements (agree = extrovert, disagree = introvert)
+   { id: 1, text: 'I feel energized and excited when attending large parties', weight: 3, reverse: false },
+   { id: 2, text: 'I am comfortable being the center of attention', weight: 2, reverse: false },
+   { id: 3, text: 'I recharge by being around people', weight: 3, reverse: false },
+   { id: 4, text: 'I enjoy meeting new people frequently', weight: 2, reverse: false },
+   { id: 5, text: 'I think out loud when making decisions', weight: 1, reverse: false },
+   
+   // Introverted statements (agree = introvert, disagree = extrovert)  
+   { id: 6, text: 'I prefer quiet, intimate gatherings', weight: 3, reverse: true },
+   { id: 7, text: 'I need alone time to recharge after social events', weight: 3, reverse: true },
+   { id: 8, text: 'I prefer deep one-on-one conversations over group discussions', weight: 2, reverse: true },
+   { id: 9, text: 'I feel drained after spending time in large groups', weight: 2, reverse: true },
+   { id: 10, text: 'I prefer working independently rather than in teams', weight: 1, reverse: true },
 ]
 
+
+const shuffleArray = <T,>(array: T[]): T[] => {
+  const shuffled = [...array]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  return shuffled
+}
 
 
 export const Quiz: React.FC = () => {
@@ -85,18 +97,20 @@ export const Quiz: React.FC = () => {
           headers: { Authorization: `Bearer ${token}` },
         })
         const data: QuizQuestion[] =
-          Array.isArray(response.data) && response.data.length > 0
-            ? response.data
+        response.data.questions && Array.isArray(response.data.questions) && response.data.questions.length > 0
+            ? response.data.questions
             : DEFAULT_QUESTIONS
+        const shuffledQuestions = shuffleArray(data)
 
-        setQuestions(data)
-        setResponses(new Array(data.length).fill(0))
+        setQuestions(shuffledQuestions)
+        setResponses(new Array(shuffledQuestions.length).fill(0))
         setLoading(false)
       } catch (error) {
         console.error('Failed to load questions, falling back to defaults:', error)
         // Use local defaults so the quiz always renders even if the API is not ready
-        setQuestions(DEFAULT_QUESTIONS)
-        setResponses(new Array(DEFAULT_QUESTIONS.length).fill(0))
+        const shuffledDefaults = shuffleArray(DEFAULT_QUESTIONS)
+        setQuestions(shuffledDefaults)
+        setResponses(new Array(shuffledDefaults.length).fill(0))
         setLoading(false)
       }
     }

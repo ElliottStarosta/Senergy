@@ -311,11 +311,11 @@
             onEnter: () => {
               categoryItems.forEach((item, index) => {
                 const bar = item.querySelector('.h-3 > div')
-                if (bar) {
+                if (bar && place && place.stats && place.stats.avgCategories) {
                   // Get the parent width and target percentage
                   const value = Object.values(place.stats.avgCategories)[index]
                   const targetWidth = `${(value / 10) * 100}%`
-              
+
                   gsap.fromTo(
                     bar,
                     { width: '0%' },
