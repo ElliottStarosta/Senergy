@@ -5,9 +5,9 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/services/firebase'
 import gsap from 'gsap'
 import { useAuth } from '@/context/AuthContext'
-import axios from 'axios'
 import Snowfall from 'react-snowfall'
 import { DashboardReturnBtn } from '@/components/common/DashboardReturnBtn'
+import api from '@/api/config'
 
 interface PlaceResult {
   id?: string
@@ -73,7 +73,28 @@ export const Rate: React.FC = () => {
   const successRedirectRef = useRef<HTMLParagraphElement>(null)
   const hasAnimatedSuccess = useRef(false)
 
+  const [previewScore, setPreviewScore] = useState<number | null>(null)
+  const [isCalculatingPreview, setIsCalculatingPreview] = useState(false)
+
+
   const headerIconRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (segment === 2 && currentRatingIndex === ratingQuestions.length) {
+      fetchPreviewScore()
+    }
+  }, [segment, currentRatingIndex])
+
+  // Add this useEffect to update preview when categories change (debounced):
+  useEffect(() => {
+    if (segment === 2 && currentRatingIndex === ratingQuestions.length) {
+      const timeoutId = setTimeout(() => {
+        fetchPreviewScore()
+      }, 500) // Debounce by 500ms
+
+      return () => clearTimeout(timeoutId)
+    }
+  }, [categories])
 
 
   // GSAP idle animation for header icon
@@ -583,21 +604,31 @@ export const Rate: React.FC = () => {
 
 
 
-  const calculateOverallScore = (): number => {
-    const weights = {
-      atmosphere: 0.25,
-      socialEnergy: 0.25,
-      crowdSize: 0.15,
-      noiseLevel: 0.15,
-      service: 0.2,
+  const fetchPreviewScore = async () => {
+    if (!user) return
+
+    setIsCalculatingPreview(true)
+
+    try {
+      const response = await api.post(
+        '/api/ratings/preview',
+        {
+          categories,
+          userAdjustmentFactor: user.adjustmentFactor || 0,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+
+      if (response.data.success) {
+        setPreviewScore(response.data.data.overallScore)
+      }
+    } catch (error) {
+      console.error('Failed to calculate preview:', error)
+    } finally {
+      setIsCalculatingPreview(false)
     }
-
-    const weighted = Object.entries(weights).reduce((sum, [key, weight]) => {
-      return sum + (categories[key as keyof typeof categories] * weight)
-    }, 0)
-
-    return Math.round(weighted * 10) / 10
   }
+
 
   const handleSubmit = async () => {
     if (!selectedPlace || !user) return
@@ -627,7 +658,7 @@ export const Rate: React.FC = () => {
 
       // Also sync to backend API
       try {
-        await axios.post(
+        await api.post(
           '/api/ratings',
           ratingData,
           { headers: { Authorization: `Bearer ${token}` } }
@@ -1041,11 +1072,28 @@ export const Rate: React.FC = () => {
                         ref={overallScoreRef}
                         className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 bg-clip-text text-transparent mb-2"
                       >
-                        {calculateOverallScore()}
+                        {isCalculatingPreview ? (
+                          <i className="fas fa-spinner fa-spin text-indigo-600" />
+                        ) : (
+                          previewScore !== null ? previewScore : 6.7
+                        )}
                       </div>
                       <p ref={scoreTextRef} className="text-slate-600">
                         Your Overall Rating
                       </p>
+                      {user?.adjustmentFactor && Math.abs(user.adjustmentFactor) >= 0.2 && (
+                        <p ref={el => {
+                          if (el && segment === 2 && currentRatingIndex === ratingQuestions.length && !hasAnimatedCommentSection.current) {
+                            gsap.fromTo(el,
+                              { opacity: 0, y: 5, scale: 0.95 },
+                              { opacity: 1, y: 0, scale: 1, duration: 0.5, delay: 0.3, ease: 'back.out(1.5)' }
+                            )
+                          }
+                        }} className="text-xs text-slate-500 mt-2 flex items-center justify-center gap-2">
+                          <i className="fas fa-magic text-indigo-400" />
+                          <span>Adjusted for your {user.adjustmentFactor <= -0.2 ? 'introverted' : 'extroverted'} preferences</span>
+                        </p>
+                      )}
                     </div>
                     <p ref={completedTextRef} className="text-sm text-slate-500">
                       You've completed all ratings!

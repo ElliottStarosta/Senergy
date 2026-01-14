@@ -142,61 +142,91 @@ router.get('/places', authMiddleware, async (req: Request, res: Response) => {
       radius
     )
 
+    console.log("nearby places", nearbyPlaces)
+
     // Score each place for this user
     const recommendations: Array<any> = []
+
+    console.log(`Processing ${nearbyPlaces.length} places for user ${userId}`)
 
     for (const place of nearbyPlaces) {
       const ratings = await ratingService.getPlaceRatings(place.id)
       
-      if (ratings.length === 0) continue
+      console.log(`Place: ${place.name} - ${ratings.length} ratings`)
+      
+      // Handle places with NO ratings - show them with neutral scores
+      if (ratings.length === 0) {
+        console.log(`  → Adding unrated place: ${place.name}`)
+        recommendations.push({
+          id: place.id,
+          name: place.name,
+          address: place.address,
+          location: place.location,
+          predictedScore: 5.0, // Neutral score
+          confidence: 0, // No confidence since unrated
+          totalRatings: 0,
+          similarRatings: 0,
+          isUnrated: true, // Flag for frontend
+        })
+        continue
+      }
 
-      // Find ratings from users with similar personality
-      const similarRatings = ratings.filter(r => {
-        const afDiff = Math.abs(r.userAdjustmentFactor - userAF)
-        return afDiff <= 0.4
+      // Use personality-adjusted scoring for rated places
+      const adjustedRatings = ratings.map(rating => {
+        // Calculate what this rating would mean for the viewing user
+        const adjustedOverallScore = ratingService.calculateAdjustedScoreForViewer(
+          rating.categories,
+          rating.userAdjustmentFactor,
+          userAF
+        )
+        
+        return {
+          ...rating,
+          adjustedOverallScore,
+          personalityDistance: Math.abs(rating.userAdjustmentFactor - userAF)
+        }
       })
 
-      if (similarRatings.length === 0) continue
+      // Calculate average of all personality-adjusted scores
+      // We don't need personality similarity weighting - the scores are already adjusted!
+      const avgAdjustedScore = adjustedRatings.reduce((sum, r) => sum + r.adjustedOverallScore, 0) / adjustedRatings.length
+      const confidence = Math.min(ratings.length / 10, 1)
 
-      // Calculate predicted score
-      let weightedSum = 0
-      let totalWeight = 0
-
-      similarRatings.forEach(rating => {
-        const afDistance = Math.abs(rating.userAdjustmentFactor - userAF)
-        const similarity = 1 - (afDistance / 0.4)
-        const weight = similarity * similarity
-
-        weightedSum += rating.overallScore * weight
-        totalWeight += weight
-      })
-
-      const predictedScore = weightedSum / totalWeight
-      const confidence = Math.min(similarRatings.length / 10, 1)
+      console.log(`  → Adjusted score: ${Math.round(avgAdjustedScore * 10) / 10}, Confidence: ${Math.round(confidence * 100)}%`)
 
       recommendations.push({
         id: place.id,
         name: place.name,
         address: place.address,
         location: place.location,
-        predictedScore: Math.round(predictedScore * 10) / 10,
+        predictedScore: Math.round(avgAdjustedScore * 10) / 10,
         confidence: Math.round(confidence * 100),
         totalRatings: ratings.length,
-        similarRatings: similarRatings.length,
+        similarRatings: adjustedRatings.length,
       })
     }
 
-    // Sort by predicted score * confidence
+    // Sort: Rated places first (by score * confidence), then unrated places
     recommendations.sort((a, b) => {
+      // Unrated places go to the end
+      if (a.isUnrated && !b.isUnrated) return 1
+      if (!a.isUnrated && b.isUnrated) return -1
+      if (a.isUnrated && b.isUnrated) return 0
+
+      // Sort rated places by predicted score * confidence
       const scoreA = a.predictedScore * (a.confidence / 100)
       const scoreB = b.predictedScore * (b.confidence / 100)
       return scoreB - scoreA
     })
 
+    console.log(`Returning ${recommendations.length} places (${recommendations.filter(r => !r.isUnrated).length} rated, ${recommendations.filter(r => r.isUnrated).length} unrated)`)
+
     res.json({
       success: true,
       data: recommendations.slice(0, limit),
       count: recommendations.length,
+      rated: recommendations.filter(r => !r.isUnrated).length,
+      unrated: recommendations.filter(r => r.isUnrated).length,
     })
   } catch (error: any) {
     console.error('Explore places error:', error)

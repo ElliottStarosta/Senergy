@@ -22,8 +22,8 @@ export class RatingService {
     userAdjustmentFactor: number,
     userPersonalityType: string
   ): Promise<Rating> {
-    // Calculate overall score (weighted average)
-    const overallScore = this.calculateOverallScore(categories)
+    // Calculate overall score (weighted average) - adjusted for rater's personality
+    const overallScore = this.calculateOverallScore(categories, userAdjustmentFactor)
 
     const ratingData = {
       userId,
@@ -107,7 +107,8 @@ export class RatingService {
     // If categories changed, recalculate overall score
     let updatesToApply: any = { ...updates }
     if (updates.categories) {
-      updatesToApply.overallScore = this.calculateOverallScore(updates.categories)
+      const oldRating = ratingDoc.data() as Rating
+      updatesToApply.overallScore = this.calculateOverallScore(updates.categories, oldRating.userAdjustmentFactor)
     }
 
     updatesToApply.updatedAt = new Date().toISOString()
@@ -172,6 +173,123 @@ export class RatingService {
 
   /**
    * Get nearby places with ratings
+   * Get stats for a place adjusted for a specific user's personality
+   * This adjusts category averages based on the viewer's personality
+   */
+  async getPlaceStatsForUser(placeId: string, viewerAdjustmentFactor: number): Promise<PlaceStats | null> {
+    const placeDoc = await this.placesCol.doc(placeId).get()
+    
+    if (!placeDoc.exists) {
+      return null
+    }
+
+    const place = placeDoc.data() as Place
+    const baseStats = place.stats
+
+    // Get all ratings to recalculate adjusted categories
+    const ratings = await this.getPlaceRatings(placeId)
+    
+    if (ratings.length === 0) {
+      return baseStats
+    }
+
+    // Calculate adjusted category averages
+    // For each rating, adjust categories based on rater's personality, then adjust again for viewer
+    const adjustedCategories: RatingCategory = {
+      crowdSize: 0,
+      noiseLevel: 0,
+      socialEnergy: 0,
+      service: 0,
+      atmosphere: 0,
+    }
+
+    ratings.forEach(rating => {
+      // First, normalize the rating to what it means objectively
+      // If introvert rated crowdSize=2, that means they liked low crowd (invert to 9)
+      // If extrovert rated crowdSize=8, that means they liked high crowd (keep as 8)
+      const normalizedCategories = this.normalizeCategoriesToObjective(rating.categories, rating.userAdjustmentFactor)
+      
+      // Then, adjust for the viewer's personality
+      // If viewer is extrovert, they want high crowd, so keep normalized value
+      // If viewer is introvert, they want low crowd, so invert normalized value
+      const viewerAdjusted = this.adjustCategoriesForViewer(normalizedCategories, viewerAdjustmentFactor)
+      
+      // Accumulate
+      Object.keys(adjustedCategories).forEach(key => {
+        adjustedCategories[key as keyof RatingCategory] += viewerAdjusted[key as keyof RatingCategory]
+      })
+    })
+
+    // Average
+    const count = ratings.length
+    Object.keys(adjustedCategories).forEach(key => {
+      adjustedCategories[key as keyof RatingCategory] = Math.round(
+        (adjustedCategories[key as keyof RatingCategory] / count) * 10
+      ) / 10
+    })
+
+    // Recalculate overall score with adjusted categories
+    const adjustedOverallScore = this.calculateOverallScore(adjustedCategories, viewerAdjustmentFactor)
+
+    return {
+      ...baseStats,
+      avgOverallScore: adjustedOverallScore,
+      avgCategories: adjustedCategories,
+    }
+  }
+
+  /**
+   * Normalize categories to objective values
+   * Converts personality-biased ratings to what they objectively mean
+   * Example: Introvert rates crowdSize=2 → means they liked low crowd → normalize to 9 (high score)
+   */
+  private normalizeCategoriesToObjective(
+    categories: RatingCategory,
+    raterAdjustmentFactor: number
+  ): RatingCategory {
+    const personalitySensitive = ['crowdSize', 'noiseLevel', 'socialEnergy'] as const
+    const normalized = { ...categories }
+
+    // If rater is introvert, their low ratings mean they liked it (invert)
+    if (raterAdjustmentFactor <= -0.2) {
+      personalitySensitive.forEach(key => {
+        normalized[key] = 11 - categories[key]
+      })
+    }
+    // If rater is extrovert or ambivert, their ratings already reflect objective value
+
+    return normalized
+  }
+
+  /**
+   * Adjust normalized categories for viewer's personality
+   * Converts objective values to what they mean for the viewer
+   * Example: Objective crowdSize=9, viewer is extrovert → keep 9 (high is good)
+   *          Objective crowdSize=9, viewer is introvert → invert to 2 (low is good)
+   */
+  private adjustCategoriesForViewer(
+    normalizedCategories: RatingCategory,
+    viewerAdjustmentFactor: number
+  ): RatingCategory {
+    return this.adjustCategoriesForPersonality(normalizedCategories, viewerAdjustmentFactor)
+  }
+
+  /**
+   * Public: Calculate adjusted overall score for a rating when viewed by a specific user
+   * This is used by recommendation and explore services
+   */
+  calculateAdjustedScoreForViewer(
+    ratingCategories: RatingCategory,
+    raterAdjustmentFactor: number,
+    viewerAdjustmentFactor: number
+  ): number {
+    // Normalize to objective, then adjust for viewer
+    const normalized = this.normalizeCategoriesToObjective(ratingCategories, raterAdjustmentFactor)
+    const adjusted = this.adjustCategoriesForViewer(normalized, viewerAdjustmentFactor)
+    return this.calculateOverallScore(adjusted, 0)
+  }
+
+  /**
    */
   async getNearbyPlaces(
     lat: number,
@@ -289,12 +407,23 @@ async deletePlaceFromAlgolia(placeId: string): Promise<void> {
   }
 }
 
+  calculatePreviewScore(
+    categories: RatingCategory,
+    userAdjustmentFactor: number
+  ): number {
+    return this.calculateOverallScore(categories, userAdjustmentFactor)
+  }
+
   /**
    * Private: Calculate overall score from categories
+  
+   * Adjusts personality-sensitive categories based on rater's personality
+   * 
+   * For introverts: low crowd/noise/socialEnergy = good (invert the value)
+   * For extroverts: high crowd/noise/socialEnergy = good (keep as is)
+   * For ambiverts: neutral preference (keep as is)
    */
-
-   
-  private calculateOverallScore(categories: RatingCategory): number {
+  private calculateOverallScore(categories: RatingCategory, raterAdjustmentFactor: number): number {
     const weights = {
       atmosphere: 0.25,
       socialEnergy: 0.25,
@@ -303,14 +432,49 @@ async deletePlaceFromAlgolia(placeId: string): Promise<void> {
       service: 0.2,
     }
 
+    // Adjust personality-sensitive categories based on rater's personality
+    // Introverts prefer low values, extroverts prefer high values
+    const adjustedCategories = this.adjustCategoriesForPersonality(categories, raterAdjustmentFactor)
+
     const weighted =
-      categories.crowdSize * weights.crowdSize +
-      categories.noiseLevel * weights.noiseLevel +
-      categories.socialEnergy * weights.socialEnergy +
-      categories.service * weights.service +
-      categories.atmosphere * weights.atmosphere
+      adjustedCategories.crowdSize * weights.crowdSize +
+      adjustedCategories.noiseLevel * weights.noiseLevel +
+      adjustedCategories.socialEnergy * weights.socialEnergy +
+      adjustedCategories.service * weights.service +
+      adjustedCategories.atmosphere * weights.atmosphere
 
     return Math.round(weighted * 10) / 10
+  }
+
+  /**
+   * Adjust category ratings based on personality
+   * Personality-sensitive categories: crowdSize, noiseLevel, socialEnergy
+   * 
+   * For introverts (AF < -0.2): Low values are good → invert (11 - value)
+   * For extroverts (AF > 0.2): High values are good → keep as is
+   * For ambiverts: Neutral → keep as is
+   */
+  private adjustCategoriesForPersonality(
+    categories: RatingCategory,
+    adjustmentFactor: number
+  ): RatingCategory {
+    // Personality-sensitive categories that need adjustment
+    const personalitySensitive = ['crowdSize', 'noiseLevel', 'socialEnergy'] as const
+    
+    const adjusted = { ...categories }
+    
+    // Strong introvert: invert personality-sensitive categories
+    if (adjustmentFactor <= -0.2) {
+      personalitySensitive.forEach(key => {
+        // Invert: low becomes high (11 - value)
+        // Example: 2/10 becomes 9/10 (good for introvert = high score)
+        adjusted[key] = 11 - categories[key]
+      })
+    }
+    // Strong extrovert: keep as is (high values are already good)
+    // Ambivert: keep as is (neutral preference)
+    
+    return adjusted
   }
 
   /**

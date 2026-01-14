@@ -1,12 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { User, AuthState } from '@/types'
-import axios from 'axios'
 import { api } from '@/api/config' 
-import { APIDocumentation } from '@/pages/APIDocumentation'
 
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<void>
-  register: (email: string, password: string, displayName: string) => Promise<void>
+  register: (email: string, password: string, displayName: string, location?: { lat: number; lng: number } | null) => Promise<void>
   logout: () => void
   isAuthenticated: boolean
   updateUserProfile: (partial: Partial<User>) => void
@@ -90,8 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           const verifyNewToken = async () => {
             try {
-              const axiosInstance = axios.create({ timeout: 5000 })
-              const response = await axiosInstance.get('/api/auth/verify', {
+              const response = await api.get('/api/auth/verify', {
                 headers: { Authorization: `Bearer ${newToken}` },
               })
               console.log('[AuthContext] New token verified from storage event')
@@ -123,7 +120,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = useCallback(async (email: string, password: string) => {
     setState(prev => ({ ...prev, isLoading: true, error: null }))
     try {
-      const response = await axios.post('/api/auth/login', { email, password })
+      const response = await api.post('/api/auth/login', { email, password })
       const { user, token } = response.data
 
       localStorage.setItem('auth_token', token)
@@ -144,10 +141,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [])
 
-  const register = useCallback(async (email: string, password: string, displayName: string) => {
+  const register = useCallback(async (email: string, password: string, displayName: string, location?: { lat: number; lng: number } | null) => {
     setState(prev => ({ ...prev, isLoading: true, error: null }))
     try {
-      const response = await axios.post('/api/auth/register', { email, password, displayName })
+      const response = await api.post('/api/auth/register', { 
+        email, 
+        password, 
+        displayName,
+        location: location || null
+      })
       const { user, token } = response.data
 
       localStorage.setItem('auth_token', token)

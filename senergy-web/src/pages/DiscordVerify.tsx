@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import gsap from 'gsap'
 import Snowfall from 'react-snowfall'
-import axios from 'axios'
 import { useAuth } from '@/context/AuthContext'
+import api from '@/api/config'
 
 export const DiscordVerify: React.FC = () => {
 
@@ -488,7 +488,7 @@ export const DiscordVerify: React.FC = () => {
       try {
         console.log('[DiscordVerify] Checking verification status...')
 
-        const response = await axios.get(`/api/auth/discord/status/${user.id}`)
+        const response = await api.get(`/api/auth/discord/status/${user.id}`)
 
         console.log('[DiscordVerify] Status:', response.data)
 

@@ -80,7 +80,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       'noiseLevel',
       'socialEnergy',
     ]
-    
+
     for (const cat of requiredCategories) {
       if (!(cat in categories)) {
         return res.status(400).json({
@@ -155,22 +155,140 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
   }
 })
 
-/**
- * GET /api/ratings/place/:placeId
- * Get all ratings for a place
- */
-router.get('/place/:placeId', async (req: Request, res: Response) => {
-  try {
-    const { placeId } = req.params
 
-    const ratings = await ratingService.getPlaceRatings(placeId)
-    const stats = await ratingService.getPlaceStats(placeId)
+/**
+ * POST /api/ratings/preview
+ * Calculate what the overall score would be WITHOUT saving
+ * Uses the RatingService to ensure consistency with actual saves
+ */
+router.post('/preview', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!
+    const {
+      categories,
+      userAdjustmentFactor,
+    } = req.body
+
+    // Validate categories
+    const requiredCategories = [
+      'atmosphere',
+      'service',
+      'crowdSize',
+      'noiseLevel',
+      'socialEnergy',
+    ]
+
+    for (const cat of requiredCategories) {
+      if (!(cat in categories)) {
+        return res.status(400).json({
+          success: false,
+          error: `Missing category: ${cat}`,
+        })
+      }
+      const value = categories[cat]
+      if (typeof value !== 'number' || value < 1 || value > 10) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid ${cat} value. Must be between 1-10`,
+        })
+      }
+    }
+
+    const adjustmentFactor = userAdjustmentFactor ?? 0
+
+    // Use RatingService's public calculatePreviewScore method
+    // This ensures we use the EXACT same logic as createRating()
+    const overallScore = ratingService.calculatePreviewScore(
+      categories as RatingCategory,
+      adjustmentFactor
+    )
 
     res.json({
       success: true,
       data: {
-        ratings,
+        overallScore,
+        adjustmentFactor,
+        wasAdjusted: adjustmentFactor <= -0.2 || adjustmentFactor >= 0.2,
+      },
+    })
+  } catch (error: any) {
+    console.error('Preview rating error:', error)
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to calculate preview',
+    })
+  }
+})
+
+/**
+ * GET /api/ratings/place/:placeId
+ * Get all ratings for a place
+ * Optional query param: userId - if provided, returns stats adjusted for that user's personality
+ */
+router.get('/place/:placeId', async (req: Request, res: Response) => {
+  try {
+    const { placeId } = req.params
+    const userId = req.query.userId as string | undefined
+
+    const ratings = await ratingService.getPlaceRatings(placeId)
+
+    let stats = await ratingService.getPlaceStats(placeId)
+    let viewerAF = 0
+
+    if (userId) {
+      const { db } = await import('@/config/firebase')
+      const userDoc = await db.collection('users').doc(userId).get()
+
+      if (userDoc.exists) {
+        const userData = userDoc.data()
+        viewerAF = Number(userData?.adjustmentFactor ?? 0)
+
+        const adjustedStats = await ratingService.getPlaceStatsForUser(
+          placeId,
+          viewerAF
+        )
+
+        if (adjustedStats) {
+          stats = adjustedStats
+        }
+      }
+    }
+
+    // Adjust each rating for viewer
+    const adjustedRatings = ratings.map(rating => {
+      const displayScore =
+        userId
+          ? ratingService.calculateAdjustedScoreForViewer(
+              rating.categories,
+              rating.userAdjustmentFactor,
+              viewerAF
+            )
+          : Number(rating.overallScore ?? 0)
+
+      return {
+        ...rating,
+        overallScore: displayScore,
+      }
+    })
+
+    const avgOverallScore =
+      adjustedRatings.length > 0
+        ? adjustedRatings.reduce(
+            (sum: number, r) => sum + Number(r.overallScore ?? 0),
+            0
+          ) / adjustedRatings.length
+        : 0
+
+    if (stats) {
+      stats.avgOverallScore = avgOverallScore
+    }
+
+    res.json({
+      success: true,
+      data: {
+        ratings: adjustedRatings,
         stats,
+        adjustedForUser: Boolean(userId),
       },
     })
   } catch (error: any) {
@@ -181,6 +299,7 @@ router.get('/place/:placeId', async (req: Request, res: Response) => {
     })
   }
 })
+
 
 /**
  * PUT /api/ratings/:ratingId

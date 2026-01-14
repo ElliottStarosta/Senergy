@@ -370,13 +370,15 @@ router.get('/reverse', async (req: Request, res: Response) => {
 /**
  * GET /api/places/:placeId
  * Get full place details including all metadata
+ * Optional query param: userId - if provided, returns stats adjusted for that user's personality
  */
 router.get('/:placeId', async (req: Request, res: Response) => {
   try {
     const { placeId } = req.params
+    const userId = req.query.userId as string | undefined
 
     // Get place from our database
-    const stats = await ratingService.getPlaceStats(placeId)
+    let stats = await ratingService.getPlaceStats(placeId)
     const ratings = await ratingService.getPlaceRatings(placeId)
 
     if (ratings.length === 0) {
@@ -384,6 +386,20 @@ router.get('/:placeId', async (req: Request, res: Response) => {
         success: false,
         error: 'Place not found',
       })
+    }
+
+    // If userId provided, get personality-adjusted stats
+    if (userId) {
+      const { db } = await import('@/config/firebase')
+      const userDoc = await db.collection('users').doc(userId).get()
+      if (userDoc.exists) {
+        const userData = userDoc.data()
+        const userAF = userData?.adjustmentFactor || 0
+        const adjustedStats = await ratingService.getPlaceStatsForUser(placeId, userAF)
+        if (adjustedStats) {
+          stats = adjustedStats
+        }
+      }
     }
 
     const firstRating = ratings[0]
@@ -416,6 +432,7 @@ router.get('/:placeId', async (req: Request, res: Response) => {
     res.json({
       success: true,
       data: place,
+      adjustedForUser: !!userId,
     })
   } catch (error: any) {
     console.error('Get place error:', error)

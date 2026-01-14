@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
-import axios from 'axios'
 import gsap from 'gsap'
+import api from '@/api/config'
 
 interface Match {
   userId: string
@@ -31,7 +31,7 @@ export const Matching: React.FC = () => {
 
     const loadMatches = async () => {
       try {
-        const response = await axios.get(
+        const response = await api.get(
           `/api/users/matches?personalityRange=${personalityRange}&maxDistance=${maxDistance}`,
           { headers: { Authorization: `Bearer ${token}` } }
         )

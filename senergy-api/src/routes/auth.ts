@@ -12,12 +12,13 @@ const router = Router()
 // Register
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { email, password, displayName } = req.body
+    const { email, password, displayName, location } = req.body
 
     console.log('[Auth] Register request received:', { 
       email: email ? `${email.substring(0, 3)}***` : 'missing',
       hasPassword: !!password,
-      hasDisplayName: !!displayName 
+      hasDisplayName: !!displayName,
+      hasLocation: !!location
     })
 
     if (!email || !password || !displayName) {
@@ -29,7 +30,27 @@ router.post('/register', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing required fields' })
     }
 
-    const result = await authService.registerUser({ email, password, displayName })
+    // Validate location if provided
+    let lastRatedPlaceLocation = null
+    if (location) {
+      if (typeof location.lat === 'number' && typeof location.lng === 'number' &&
+          !isNaN(location.lat) && !isNaN(location.lng)) {
+        lastRatedPlaceLocation = {
+          lat: location.lat,
+          lng: location.lng
+        }
+        console.log('[Auth] Location provided:', lastRatedPlaceLocation)
+      } else {
+        console.warn('[Auth] Invalid location format, ignoring')
+      }
+    }
+
+    const result = await authService.registerUser({ 
+      email, 
+      password, 
+      displayName,
+      lastRatedPlaceLocation 
+    })
     res.status(201).json(result)
   } catch (error: any) {
     console.error('[Auth] Register error:', error)

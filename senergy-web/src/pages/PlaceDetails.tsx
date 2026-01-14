@@ -1,12 +1,12 @@
   import React, { useEffect, useState, useRef } from 'react'
   import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
   import { useAuth } from '@/context/AuthContext'
-  import axios from 'axios'
   import gsap from 'gsap'
   import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
   import Snowfall from 'react-snowfall'
   import { DashboardReturnBtn } from '@/components/common/DashboardReturnBtn'
+import api from '@/api/config'
 
   // Register the plugin
   gsap.registerPlugin(ScrollTrigger)
@@ -116,11 +116,19 @@
 
       const fetchPlaceDetails = async () => {
         try {
-          const response = await axios.get(`/api/ratings/place/${placeId}`, {
+          const params = user?.id ? { userId: user.id } : {}
+
+          const response = await api.get(`/api/ratings/place/${placeId}`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
+            params,
           })
 
+          
+
           const placeData = response.data.data
+
+          console.log(placeData)
+
           if (!placeData.ratings || placeData.ratings.length === 0) {
             setError('Place not found')
             setLoading(false)

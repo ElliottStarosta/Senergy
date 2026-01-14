@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
-import axios from 'axios'
 import gsap from 'gsap'
 import Snowfall from 'react-snowfall'
 import { DashboardReturnBtn } from '@/components/common/DashboardReturnBtn'
 import { doc, onSnapshot, collection, query, where, orderBy } from 'firebase/firestore'
 import { db } from '@/services/firebase'
+import api from '@/api/config'
 
 interface GroupMember {
   userId: string
@@ -481,7 +481,7 @@ export const Groups: React.FC = () => {
 
     const loadGroups = async () => {
       try {
-        const response = await axios.get('/api/groups/user/active', {
+        const response = await api.get('/api/groups/user/active', {
           headers: { Authorization: `Bearer ${token}` },
         })
         const groupsData = response.data.data || []
@@ -1336,14 +1336,14 @@ export const Groups: React.FC = () => {
                     if (!confirm('Archive this group? You can view it later in archived groups.')) return
 
                     try {
-                      await axios.post(
+                      await api.post(
                         `/api/groups/${currentGroup.id}/archive`,
                         {},
                         { headers: { Authorization: `Bearer ${token}` } }
                       )
 
                       // Refresh groups
-                      const response = await axios.get('/api/groups/user/active', {
+                      const response = await api.get('/api/groups/user/active', {
                         headers: { Authorization: `Bearer ${token}` },
                       })
                       setGroups(response.data.data || [])

@@ -5,6 +5,7 @@ import gsap from 'gsap'
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 import { auth } from '@/services/firebase'
 import api from '@/api/config'
+import { getHighPrecisionLocation } from '@/services/location'
 
 export const Register: React.FC = () => {
   const navigate = useNavigate()
@@ -26,6 +27,8 @@ export const Register: React.FC = () => {
   const requirementsListRef = useRef<HTMLDivElement>(null)
   const tlRef = useRef<gsap.core.Timeline | null>(null)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [locationLoading, setLocationLoading] = useState(false)
 
 
   const calculatePasswordStrength = (pwd: string): { strength: number; label: string; color: string } => {
@@ -384,10 +387,10 @@ export const Register: React.FC = () => {
     try {
       console.log('📝 Starting registration...')
       
-      // Register the user
-      await register(email, password, displayName)
+      // Register the user with location if available
+      await register(email, password, displayName, userLocation)
       
-      console.log('✅ Registration successful')
+      console.log('✅ Registration successful', userLocation ? 'with location' : 'without location')
       
       // IMPORTANT: Wait for auth context to update and token to be stored
       await new Promise(resolve => setTimeout(resolve, 1500))

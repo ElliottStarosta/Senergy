@@ -309,8 +309,9 @@ private async scorePlaceForGroup(
     groupMetrics
   )
 
-  // Calculate average categories
-  const avgCategories = this.calculateAverageCategories(ratings)
+  // Calculate average categories - adjust for group's average personality
+  const groupAvgAF = groupMetrics.avgAdjustmentFactor
+  const avgCategories = this.calculateAverageCategories(ratings, groupAvgAF)
 
   return {
     placeId: place.id,
@@ -403,6 +404,7 @@ private async scorePlaceForGroup(
 
   /**
    * Score a place for an individual member
+   * Uses personality-adjusted ratings for accurate predictions
    */
   private async scorePlaceForMember(
     placeId: string,
@@ -411,18 +413,34 @@ private async scorePlaceForGroup(
   ): Promise<{ score: number; confidence: number }> {
     const memberAF = member.adjustmentFactor || 0
 
-    // Find ratings from similar users (within 0.3 AF range)
-    const similarRatings = allRatings.filter(rating => {
-      const distance = Math.abs(rating.userAdjustmentFactor - memberAF)
-      return distance <= 0.3
+    // Adjust each rating's overall score for the member's personality
+    // This ensures ratings from different personalities are comparable
+    const adjustedRatings = allRatings.map(rating => {
+      // Calculate what this rating would mean for the viewing member
+      const adjustedOverallScore = ratingService.calculateAdjustedScoreForViewer(
+        rating.categories,
+        rating.userAdjustmentFactor,
+        memberAF
+      )
+      
+      return {
+        ...rating,
+        adjustedOverallScore,
+        personalityDistance: Math.abs(rating.userAdjustmentFactor - memberAF)
+      }
+    })
+
+    // Find ratings from similar users (within 0.3 AF range) - but use all ratings with adjusted scores
+    const similarRatings = adjustedRatings.filter(rating => {
+      return rating.personalityDistance <= 0.3
     })
 
     if (similarRatings.length === 0) {
-      // No similar users - use global average with low confidence
-      const globalAvg = allRatings.reduce((sum, r) => sum + r.overallScore, 0) / allRatings.length
+      // No similar users - use adjusted global average
+      const globalAvg = adjustedRatings.reduce((sum, r) => sum + r.adjustedOverallScore, 0) / adjustedRatings.length
       return {
         score: globalAvg,
-        confidence: Math.min(allRatings.length / 20, 0.5),
+        confidence: Math.min(adjustedRatings.length / 20, 0.5),
       }
     }
 
@@ -431,11 +449,10 @@ private async scorePlaceForGroup(
     let totalWeight = 0
 
     similarRatings.forEach(rating => {
-      const afDistance = Math.abs(rating.userAdjustmentFactor - memberAF)
-      const similarity = 1 - (afDistance / 0.3) // Convert distance to similarity (0-1)
+      const similarity = 1 - (rating.personalityDistance / 0.3) // Convert distance to similarity (0-1)
       const weight = similarity * similarity // Square for emphasis
       
-      weightedSum += rating.overallScore * weight
+      weightedSum += rating.adjustedOverallScore * weight
       totalWeight += weight
     })
 
@@ -443,8 +460,7 @@ private async scorePlaceForGroup(
 
     // Confidence based on number of similar users and their similarity
     const avgSimilarity = similarRatings.reduce((sum, r) => {
-      const afDistance = Math.abs(r.userAdjustmentFactor - memberAF)
-      return sum + (1 - (afDistance / 0.3))
+      return sum + (1 - (r.personalityDistance / 0.3))
     }, 0) / similarRatings.length
 
     const confidence = Math.min(
@@ -459,13 +475,92 @@ private async scorePlaceForGroup(
   }
 
   /**
-   * Calculate average categories from ratings
+   * Normalize categories to objective values (what the place actually has)
+   * Used for calculating average categories adjusted for viewer
    */
-  private calculateAverageCategories(ratings: any[]): RatingCategory {
+  private normalizeCategoriesToObjective(
+    categories: any,
+    raterAdjustmentFactor: number
+  ): any {
+    const personalitySensitive = ['crowdSize', 'noiseLevel', 'socialEnergy'] as const
+    const normalized = { ...categories }
+
+    // If rater is introvert, their low ratings mean they liked low values (invert to get objective)
+    if (raterAdjustmentFactor <= -0.2) {
+      personalitySensitive.forEach(key => {
+        normalized[key] = 11 - categories[key]
+      })
+    }
+
+    return normalized
+  }
+
+  /**
+   * Adjust normalized categories for viewer's personality
+   * Used for calculating average categories adjusted for viewer
+   */
+  private adjustCategoriesForViewer(
+    normalizedCategories: any,
+    viewerAdjustmentFactor: number
+  ): any {
+    const personalitySensitive = ['crowdSize', 'noiseLevel', 'socialEnergy'] as const
+    const adjusted = { ...normalizedCategories }
+
+    // If viewer is introvert, they want low values, so invert high objective values
+    if (viewerAdjustmentFactor <= -0.2) {
+      personalitySensitive.forEach(key => {
+        adjusted[key] = 11 - normalizedCategories[key]
+      })
+    }
+
+    return adjusted
+  }
+
+  /**
+   * Calculate average categories from ratings
+   * Returns categories adjusted for the group's average personality
+   */
+  private calculateAverageCategories(ratings: any[], viewerAdjustmentFactor?: number): RatingCategory {
     if (ratings.length === 0) {
       return this.getNeutralCategories()
     }
 
+    // If viewer adjustment factor provided, adjust categories for viewer
+    // Otherwise, use raw averages (for backward compatibility)
+    if (viewerAdjustmentFactor !== undefined) {
+      const adjustedTotals = ratings.reduce(
+        (acc, r) => {
+          // Normalize to objective, then adjust for viewer
+          const normalized = this.normalizeCategoriesToObjective(r.categories, r.userAdjustmentFactor || 0)
+          const adjusted = this.adjustCategoriesForViewer(normalized, viewerAdjustmentFactor)
+          
+          acc.crowdSize += adjusted.crowdSize || 5
+          acc.noiseLevel += adjusted.noiseLevel || 5
+          acc.socialEnergy += adjusted.socialEnergy || 5
+          acc.service += adjusted.service || 5
+          acc.atmosphere += adjusted.atmosphere || 5
+          return acc
+        },
+        {
+          crowdSize: 0,
+          noiseLevel: 0,
+          socialEnergy: 0,
+          service: 0,
+          atmosphere: 0,
+        }
+      )
+
+      const count = ratings.length
+      return {
+        crowdSize: Math.round((adjustedTotals.crowdSize / count) * 10) / 10,
+        noiseLevel: Math.round((adjustedTotals.noiseLevel / count) * 10) / 10,
+        socialEnergy: Math.round((adjustedTotals.socialEnergy / count) * 10) / 10,
+        service: Math.round((adjustedTotals.service / count) * 10) / 10,
+        atmosphere: Math.round((adjustedTotals.atmosphere / count) * 10) / 10,
+      } as RatingCategory
+    }
+
+    // Fallback: raw averages (for backward compatibility)
     const totals = ratings.reduce(
       (acc, r) => {
         acc.crowdSize += r.categories.crowdSize || 5

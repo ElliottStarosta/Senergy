@@ -7,6 +7,7 @@ interface CreateUserData {
   email: string
   password: string
   displayName: string
+  lastRatedPlaceLocation?: { lat: number; lng: number } | null
 }
 
 export class AuthService {
@@ -33,7 +34,14 @@ export class AuthService {
         totalGroupsJoined: 0,
       }
 
-      await db.collection('users').doc(userRecord.uid).set(user)
+      // Add location if provided
+      const userData: any = { ...user }
+      if (data.lastRatedPlaceLocation) {
+        userData.lastRatedPlaceLocation = data.lastRatedPlaceLocation
+        console.log('[Auth] Setting initial location for user:', data.lastRatedPlaceLocation)
+      }
+
+      await db.collection('users').doc(userRecord.uid).set(userData)
 
       // Generate JWT token
       const token = this.generateToken(user)

@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
-import axios from 'axios'
 import gsap from 'gsap'
 import Snowfall from 'react-snowfall'
 import { DashboardReturnBtn } from '@/components/common/DashboardReturnBtn'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import api from '@/api/config'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -92,6 +92,12 @@ export const Explore: React.FC = () => {
   const [connectError, setConnectError] = useState<string | null>(null)
   const [copiedTag, setCopiedTag] = useState(false)
 
+  const [currentPeoplePage, setCurrentPeoplePage] = useState(1)
+  const [currentPlacesPage, setCurrentPlacesPage] = useState(1)
+  const [isPeopleAnimating, setIsPeopleAnimating] = useState(false)
+  const [isPlacesAnimating, setIsPlacesAnimating] = useState(false)
+  const itemsPerPage = 6
+
   // Load people with debugging
   useEffect(() => {
     if (!user?.id || !token) return
@@ -100,7 +106,7 @@ export const Explore: React.FC = () => {
       try {
         setLoadingPeople(true)
         console.log('🔍 Loading people recommendations...')
-        const response = await axios.get(
+        const response = await api.get(
           `/api/explore/people?maxDistance=${maxDistance}`,
           { headers: { Authorization: `Bearer ${token}` } }
         )
@@ -120,7 +126,7 @@ export const Explore: React.FC = () => {
 
   useEffect(() => {
     if (!isRatingsAnimating || !selectedRatings.length) return
-  
+
     const timer = setTimeout(() => {
       if (connectRatingsRef.current) {
         const cards = connectRatingsRef.current.querySelectorAll('[data-rating-card]')
@@ -139,7 +145,7 @@ export const Explore: React.FC = () => {
         )
       }
     }, 150)
-  
+
     return () => clearTimeout(timer)
   }, [currentRatingsPage, isRatingsAnimating, selectedRatings])
 
@@ -151,9 +157,16 @@ export const Explore: React.FC = () => {
       try {
         setLoadingPlaces(true)
         console.log('🔍 Loading place recommendations...')
-        const response = await axios.get(
-          `/api/explore/places?radius=${radius}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+        const response = await api.get(
+          `/api/explore/places?radius=${radius}`, // FIXED: Changed from /api/ratings/places
+          {
+            // Combine authorization and cache-busting headers into one headers object
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
+          }
         )
         console.log('📍 Places response:', response.data)
         console.log('📍 Found', response.data.data?.length || 0, 'places')
@@ -306,6 +319,106 @@ export const Explore: React.FC = () => {
     }
   }
 
+  const handlePeoplePageChange = (newPage: number) => {
+    const totalPages = Math.ceil(people.length / itemsPerPage)
+    if (newPage < 1 || newPage > totalPages || isPeopleAnimating) return
+
+    setIsPeopleAnimating(true)
+
+    if (cardsRef.current) {
+      const cards = cardsRef.current.querySelectorAll('[data-card]')
+
+      gsap.to(cards, {
+        opacity: 0,
+        y: -20,
+        duration: 0.3,
+        stagger: 0.05,
+        ease: 'power2.in',
+        onComplete: () => {
+          setCurrentPeoplePage(newPage)
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+          setTimeout(() => setIsPeopleAnimating(false), 400)
+        }
+      })
+    } else {
+      setCurrentPeoplePage(newPage)
+      setIsPeopleAnimating(false)
+    }
+  }
+
+  const handlePlacesPageChange = (newPage: number) => {
+    const totalPages = Math.ceil(places.length / itemsPerPage)
+    if (newPage < 1 || newPage > totalPages || isPlacesAnimating) return
+
+    setIsPlacesAnimating(true)
+
+    if (cardsRef.current) {
+      const cards = cardsRef.current.querySelectorAll('[data-card]')
+
+      gsap.to(cards, {
+        opacity: 0,
+        y: -20,
+        duration: 0.3,
+        stagger: 0.05,
+        ease: 'power2.in',
+        onComplete: () => {
+          setCurrentPlacesPage(newPage)
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+          setTimeout(() => setIsPlacesAnimating(false), 400)
+        }
+      })
+    } else {
+      setCurrentPlacesPage(newPage)
+      setIsPlacesAnimating(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'people' && isPeopleAnimating) {
+      const timer = setTimeout(() => {
+        if (cardsRef.current) {
+          const cards = cardsRef.current.querySelectorAll('[data-card]')
+          gsap.fromTo(
+            cards,
+            { opacity: 0, y: 30, scale: 0.95 },
+            {
+              opacity: 1,
+              y: 0,
+              scale: 1,
+              duration: 0.5,
+              stagger: 0.08,
+              ease: 'back.out(1.7)'
+            }
+          )
+        }
+      }, 150)
+      return () => clearTimeout(timer)
+    }
+  }, [currentPeoplePage, isPeopleAnimating, activeTab])
+
+  useEffect(() => {
+    if (activeTab === 'places' && isPlacesAnimating) {
+      const timer = setTimeout(() => {
+        if (cardsRef.current) {
+          const cards = cardsRef.current.querySelectorAll('[data-card]')
+          gsap.fromTo(
+            cards,
+            { opacity: 0, y: 30, scale: 0.95 },
+            {
+              opacity: 1,
+              y: 0,
+              scale: 1,
+              duration: 0.5,
+              stagger: 0.08,
+              ease: 'back.out(1.7)'
+            }
+          )
+        }
+      }, 150)
+      return () => clearTimeout(timer)
+    }
+  }, [currentPlacesPage, isPlacesAnimating, activeTab])
+
   const getPersonalityColor = (af: number) => {
     if (af <= -0.2) return 'from-blue-400 to-blue-900'
     if (af >= 0.2) return 'from-pink-400 to-pink-900'
@@ -349,10 +462,10 @@ export const Explore: React.FC = () => {
 
     try {
       const [profileRes, ratingsRes] = await Promise.all([
-        axios.get('/api/users/' + person.id + '/profile', {
+        api.get('/api/users/' + person.id + '/profile', {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        axios.get('/api/ratings', {
+        api.get('/api/ratings', {
           headers: { Authorization: `Bearer ${token}` },
           params: { userId: person.id, limit: 10 },
         }),
@@ -384,32 +497,32 @@ export const Explore: React.FC = () => {
     if (connectPanelRef.current) {
       connectPanelRef.current.removeAttribute('data-animated')
     }
-  
+
     // Reset animations
     if (connectHeroRef.current) gsap.set(connectHeroRef.current, { clearProps: 'all' })
     if (connectStatsRef.current) gsap.set(connectStatsRef.current.querySelectorAll('[data-stat-card]'), { clearProps: 'all' })
     if (connectDiscordRef.current) gsap.set(connectDiscordRef.current, { clearProps: 'all' })
     if (connectRatingsRef.current) gsap.set(connectRatingsRef.current, { clearProps: 'all' })
-  
+
     setSelectedPerson(null)
     setSelectedProfile(null)
     setSelectedRatings([])
     setConnectError(null)
     setLoadingConnectInfo(false)
     setCopiedTag(false)
-    setCurrentRatingsPage(1) 
+    setCurrentRatingsPage(1)
     setIsRatingsAnimating(false)
   }
 
   const handleRatingsPageChange = (newPage: number) => {
     const totalPages = Math.ceil(selectedRatings.length / ratingsPerPage)
     if (newPage < 1 || newPage > totalPages || isRatingsAnimating) return
-  
+
     setIsRatingsAnimating(true)
-  
+
     if (connectRatingsRef.current) {
       const cards = connectRatingsRef.current.querySelectorAll('[data-rating-card]')
-  
+
       gsap.to(cards, {
         opacity: 0,
         y: -20,
@@ -418,22 +531,22 @@ export const Explore: React.FC = () => {
         ease: 'power2.in',
         onComplete: () => {
           setCurrentRatingsPage(newPage)
-          
+
           // Wait for DOM update
           setTimeout(() => {
             if (connectRatingsRef.current && connectPanelRef.current) {
               // Find the scrollable container - it's the div with overflow-y-auto class
               const scrollableContainer = connectPanelRef.current
-              
+
               // Get the ratings section's position relative to the top of the scrollable container
               const ratingsRect = connectRatingsRef.current.getBoundingClientRect()
               const containerRect = scrollableContainer.getBoundingClientRect()
-              
+
               // Calculate the scroll position needed
               const currentScrollTop = scrollableContainer.scrollTop
               const ratingsOffsetFromTop = ratingsRect.top - containerRect.top
               const targetScrollTop = currentScrollTop + ratingsOffsetFromTop - 150
-              
+
               // Scroll to the target position
               scrollableContainer.scrollTo({
                 top: targetScrollTop,
@@ -784,57 +897,67 @@ export const Explore: React.FC = () => {
           ) : (
             <div ref={cardsRef} className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {/* People Grid */}
-              {activeTab === 'people' &&
-                people.map((person) => (
-                  <div
-                    key={person.id}
-                    data-card
-                    className="group relative bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-slate-200/50 hover:border-purple-400 hover:shadow-2xl transition-all duration-300 p-6 cursor-pointer overflow-hidden"
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-br from-purple-50 via-pink-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              {activeTab === 'people' && (() => {
+                const totalPages = Math.ceil(people.length / itemsPerPage);
+                const startIndex = (currentPeoplePage - 1) * itemsPerPage;
+                const endIndex = startIndex + itemsPerPage;
+                const currentPeople = people.slice(startIndex, endIndex);
 
-                    <div className="relative">
-                      <div className="flex items-start gap-4 mb-5">
-                        <div
-                          className={`w-16 h-16 rounded-[4rem] flex items-center justify-center text-white text-2xl font-black bg-gradient-to-br ${getPersonalityColor(
-                            person.adjustmentFactor
-                          )} shadow-lg group-hover:scale-110 transition-transform duration-300`}
-                        >
-                          {person.displayName.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-black text-lg text-slate-900 group-hover:text-purple-600 transition-colors line-clamp-1">
-                            {person.displayName}
-                          </h3>
-                          <p className="text-xs text-slate-500 font-semibold mt-1">{person.personalityType}</p>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-3 mb-5">
-                        <div className="text-center p-3 rounded-xl bg-purple-50 border border-purple-200">
-                          <div className="text-2xl font-black text-purple-600">{Math.round(person.similarity * 100)}%</div>
-                          <div className="text-xs text-slate-600 font-semibold mt-1">Match</div>
-                        </div>
-                        <div className="text-center p-3 rounded-xl bg-blue-50 border border-blue-200">
-                          <div className="text-2xl font-black text-blue-600">{person.distance}</div>
-                          <div className="text-xs text-slate-600 font-semibold mt-1">km</div>
-                        </div>
-                        <div className="text-center p-3 rounded-xl bg-pink-50 border border-pink-200">
-                          <div className="text-2xl font-black text-pink-600">{person.totalRatingsCount}</div>
-                          <div className="text-xs text-slate-600 font-semibold mt-1">Ratings</div>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => openConnectPanel(person)}
-                        className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold hover:shadow-xl hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2"
+                return (
+                  <>
+                    {currentPeople.map((person) => (
+                      <div
+                        key={person.id}
+                        data-card
+                        className="group relative bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-slate-200/50 hover:border-purple-400 hover:shadow-2xl transition-all duration-300 p-6 cursor-pointer overflow-hidden"
                       >
-                        <i className="fas fa-user-plus" />
-                        Connect
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                        <div className="absolute inset-0 bg-gradient-to-br from-purple-50 via-pink-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+                        <div className="relative">
+                          <div className="flex items-start gap-4 mb-5">
+                            <div
+                              className={`w-16 h-16 rounded-[4rem] flex items-center justify-center text-white text-2xl font-black bg-gradient-to-br ${getPersonalityColor(
+                                person.adjustmentFactor
+                              )} shadow-lg group-hover:scale-110 transition-transform duration-300`}
+                            >
+                              {person.displayName.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex-1">
+                              <h3 className="font-black text-lg text-slate-900 group-hover:text-purple-600 transition-colors line-clamp-1">
+                                {person.displayName}
+                              </h3>
+                              <p className="text-xs text-slate-500 font-semibold mt-1">{person.personalityType}</p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-3 mb-5">
+                            <div className="text-center p-3 rounded-xl bg-purple-50 border border-purple-200">
+                              <div className="text-2xl font-black text-purple-600">{Math.round(person.similarity * 100)}%</div>
+                              <div className="text-xs text-slate-600 font-semibold mt-1">Match</div>
+                            </div>
+                            <div className="text-center p-3 rounded-xl bg-blue-50 border border-blue-200">
+                              <div className="text-2xl font-black text-blue-600">{person.distance}</div>
+                              <div className="text-xs text-slate-600 font-semibold mt-1">km</div>
+                            </div>
+                            <div className="text-center p-3 rounded-xl bg-pink-50 border border-pink-200">
+                              <div className="text-2xl font-black text-pink-600">{person.totalRatingsCount}</div>
+                              <div className="text-xs text-slate-600 font-semibold mt-1">Ratings</div>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => openConnectPanel(person)}
+                            className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold hover:shadow-xl hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2"
+                          >
+                            <i className="fas fa-user-plus" />
+                            Connect
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                );
+              })()}
 
               {/* Places Grid */}
               {activeTab === 'places' &&
@@ -921,362 +1044,361 @@ export const Explore: React.FC = () => {
       {/* Connect Panel - Full Page */}
       {selectedPerson && (
         <div className="fixed inset-0 z-50 bg-gradient-to-br from-neutral-50 via-slate-50 to-blue-50">
-          <div
-            ref={connectPanelRef}
-            className="h-full overflow-y-auto overflow-x-hidden"
-          >
-            <Snowfall
-              color="#6366f1"
-              snowflakeCount={15}
-              style={{ position: 'fixed', width: '100vw', height: '100vh', opacity: 0.3 }}
-            />
-
-            {/* Header */}
-            <header ref={connectHeaderRef} className="relative w-full border-b border-slate-200/50 bg-white/60 backdrop-blur-xl sticky top-0 z-50 shadow-sm">
-              <div className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="header-icon w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-                    <i className="fas fa-user text-white text-2xl" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">User Profile</p>
-                    <h1 className="text-2xl font-black text-slate-900">{selectedPerson.displayName}</h1>
-                  </div>
-                </div>
-                <DashboardReturnBtn
-                  text="Back to Explore"
-                  to="/explore"
-                  iconClass="fas fa-arrow-left"
-                  onClick={() => {
-                    closeConnectPanel();
-                  }}
+              <div
+                ref={connectPanelRef}
+                className="h-full overflow-y-auto overflow-x-hidden"
+              >
+                <Snowfall
+                  color="#6366f1"
+                  snowflakeCount={15}
+                  style={{ position: 'fixed', width: '100vw', height: '100vh', opacity: 0.3 }}
                 />
-              </div>
-            </header>
 
-            <main className="max-w-6xl mx-auto px-4 py-10 space-y-8">
-              {/* Hero Card */}
-              <div ref={connectHeroRef} className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-300 via-purple-600 to-pink-300 p-8 text-white shadow-2xl">
-                <div className="absolute inset-0 opacity-10">
-                  <div className="absolute top-0 left-0 w-full h-full bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,rgba(255,255,255,0.05)_10px,rgba(255,255,255,0.05)_20px)]" />
-                </div>
+                {/* Header */}
+                <header ref={connectHeaderRef} className="relative w-full border-b border-slate-200/50 bg-white/60 backdrop-blur-xl sticky top-0 z-50 shadow-sm">
+                  <div className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="header-icon w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                        <i className="fas fa-user text-white text-2xl" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">User Profile</p>
+                        <h1 className="text-2xl font-black text-slate-900">{selectedPerson.displayName}</h1>
+                      </div>
+                    </div>
+                    <DashboardReturnBtn
+                      text="Back to Explore"
+                      to="/explore"
+                      iconClass="fas fa-arrow-left"
+                      onClick={() => {
+                        closeConnectPanel();
+                      }}
+                    />
+                  </div>
+                </header>
 
-                <div className="relative z-10">
-                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-6">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className={`w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0 shadow-lg`}>
-                          <span className="text-3xl font-black">
-                            {selectedPerson.displayName.charAt(0).toUpperCase()}
-                          </span>
+                <main className="max-w-6xl mx-auto px-4 py-10 space-y-8">
+                  {/* Hero Card */}
+                  <div ref={connectHeroRef} className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-300 via-purple-600 to-pink-300 p-8 text-white shadow-2xl">
+                    <div className="absolute inset-0 opacity-10">
+                      <div className="absolute top-0 left-0 w-full h-full bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,rgba(255,255,255,0.05)_10px,rgba(255,255,255,0.05)_20px)]" />
+                    </div>
+
+                    <div className="relative z-10">
+                      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-6">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className={`w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0 shadow-lg`}>
+                              <span className="text-3xl font-black">
+                                {selectedPerson.displayName.charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                            <div>
+                              <h2 className="text-3xl font-black leading-tight">{selectedPerson.displayName}</h2>
+                              <p className="text-white/80 text-sm mt-1">{selectedPerson.personalityType}</p>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <h2 className="text-3xl font-black leading-tight">{selectedPerson.displayName}</h2>
-                          <p className="text-white/80 text-sm mt-1">{selectedPerson.personalityType}</p>
-                        </div>
-                      </div>
-                    </div>
 
-                    {/* Overall Stats Badge */}
-                    <div className="flex-shrink-0">
-                      <div className="text-center bg-white/20 backdrop-blur-sm rounded-2xl p-6 border-2 border-white/30">
-                        <div className="text-5xl font-black mb-2">{selectedProfile?.totalRatingsCount ?? selectedPerson.totalRatingsCount}</div>
-                        <div className="text-white/80 text-sm font-semibold">Total Ratings</div>
-                        <div className="text-white/60 text-xs mt-1">
-                          {Math.round(selectedPerson.similarity * 100)}% Match
+                        {/* Overall Stats Badge */}
+                        <div className="flex-shrink-0">
+                          <div className="text-center bg-white/20 backdrop-blur-sm rounded-2xl p-6 border-2 border-white/30">
+                            <div className="text-5xl font-black mb-2">{selectedProfile?.totalRatingsCount ?? selectedPerson.totalRatingsCount}</div>
+                            <div className="text-white/80 text-sm font-semibold">Total Ratings</div>
+                            <div className="text-white/60 text-xs mt-1">
+                              {Math.round(selectedPerson.similarity * 100)}% Match
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              </div>
 
-              {/* Stats Grid */}
-              <div ref={connectStatsRef} className="grid md:grid-cols-3 gap-6">
-                {/* Match Score */}
-                <div data-stat-card className="group relative overflow-hidden bg-white rounded-2xl shadow-lg border-2 border-slate-200 hover:border-purple-400 p-6 transition-all duration-300 hover:shadow-2xl hover:scale-105">
-                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-400 to-purple-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" />
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform duration-300">
-                      <i className="fas fa-heart text-white text-xl" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-1">Compatibility</p>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-black text-purple-600">{Math.round(selectedPerson.similarity * 100)}%</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Distance */}
-                <div data-stat-card className="group relative overflow-hidden bg-white rounded-2xl shadow-lg border-2 border-slate-200 hover:border-blue-400 p-6 transition-all duration-300 hover:shadow-2xl hover:scale-105">
-                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-400 to-blue-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" />
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform duration-300">
-                      <i className="fas fa-map-marker-alt text-white text-xl" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-1">Distance</p>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-black text-blue-600">{selectedPerson.distance.toFixed(1)}</span>
-                        <span className="text-sm text-slate-500">km</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Ratings Count */}
-                <div data-stat-card className="group relative overflow-hidden bg-white rounded-2xl shadow-lg border-2 border-slate-200 hover:border-pink-400 p-6 transition-all duration-300 hover:shadow-2xl hover:scale-105">
-                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-pink-400 to-pink-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" />
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-pink-500 to-pink-600 flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform duration-300">
-                      <i className="fas fa-star text-white text-xl" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-1">Ratings</p>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-black text-pink-600">{selectedProfile?.totalRatingsCount ?? selectedPerson.totalRatingsCount}</span>
-                        <span className="text-sm text-slate-500">places</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Discord Info Card */}
-              <div ref={connectDiscordRef} className="bg-white rounded-2xl shadow-lg border-2 border-slate-200 p-8">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#5865F2] to-[#5865F2] flex items-center justify-center shadow-lg">
-                    <i className="fab fa-discord text-white text-lg" />
-                  </div>
-                  <h3 className="text-2xl font-bold text-slate-900">Discord Account</h3>
-                </div>
-
-                {loadingConnectInfo ? (
-                  <div className="py-8 flex items-center justify-center text-slate-500">
-                    <i className="fas fa-spinner fa-spin text-2xl mr-3" />
-                    <span className="font-semibold">Loading Discord info...</span>
-                  </div>
-                ) : connectError ? (
-                  <div className="py-8 text-center">
-                    <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
-                      <i className="fas fa-exclamation-triangle text-2xl text-red-500" />
-                    </div>
-                    <p className="text-red-600 font-semibold">{connectError}</p>
-                  </div>
-                ) : selectedProfile?.discordId ? (
-                  <div className="p-6 rounded-xl bg-gradient-to-br from-[#5865F2]/10 to-purple-50 border-2 border-[#5865F2]/20">
-                    <div className="flex items-center justify-between">
+                  {/* Stats Grid */}
+                  <div ref={connectStatsRef} className="grid md:grid-cols-3 gap-6">
+                    {/* Match Score */}
+                    <div data-stat-card className="group relative overflow-hidden bg-white rounded-2xl shadow-lg border-2 border-slate-200 hover:border-purple-400 p-6 transition-all duration-300 hover:shadow-2xl hover:scale-105">
+                      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-400 to-purple-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" />
                       <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 rounded-2xl bg-[#5865F2] flex items-center justify-center shadow-lg">
-                          <i className="fab fa-discord text-white text-2xl" />
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform duration-300">
+                          <i className="fas fa-heart text-white text-xl" />
                         </div>
                         <div className="flex-1">
-                          <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-1">Discord Username</p>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xl font-black text-slate-900">
-                              {selectedProfile.discordUsername ? `@${selectedProfile.discordUsername}` : `@${selectedProfile.discordId}`}
-                            </span>
-                            {selectedProfile.discordVerified && (
-                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
-                                <i className="fas fa-check-circle" />
-                                Verified
-                              </span>
-                            )}
-                            <button
-                              onClick={copyDiscordTag}
-                              className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-purple-100 hover:text-purple-600 transition-all duration-200 text-sm font-semibold hover:scale-105"
-                              title="Copy Discord tag"
-                            >
-                              {copiedTag ? (
-                                <>
-                                  <i className="fas fa-check mr-1" />
-                                  Copied
-                                </>
-                              ) : (
-                                <>
-                                  <i className="fas fa-copy mr-1" />
-                                  Copy
-                                </>
-                              )}
-                            </button>
+                          <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-1">Compatibility</p>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-3xl font-black text-purple-600">{Math.round(selectedPerson.similarity * 100)}%</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Distance */}
+                    <div data-stat-card className="group relative overflow-hidden bg-white rounded-2xl shadow-lg border-2 border-slate-200 hover:border-blue-400 p-6 transition-all duration-300 hover:shadow-2xl hover:scale-105">
+                      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-400 to-blue-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" />
+                      <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform duration-300">
+                          <i className="fas fa-map-marker-alt text-white text-xl" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-1">Distance</p>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-3xl font-black text-blue-600">{selectedPerson.distance.toFixed(1)}</span>
+                            <span className="text-sm text-slate-500">km</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Ratings Count */}
+                    <div data-stat-card className="group relative overflow-hidden bg-white rounded-2xl shadow-lg border-2 border-slate-200 hover:border-pink-400 p-6 transition-all duration-300 hover:shadow-2xl hover:scale-105">
+                      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-pink-400 to-pink-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" />
+                      <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-pink-500 to-pink-600 flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform duration-300">
+                          <i className="fas fa-star text-white text-xl" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-1">Ratings</p>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-3xl font-black text-pink-600">{selectedProfile?.totalRatingsCount ?? selectedPerson.totalRatingsCount}</span>
+                            <span className="text-sm text-slate-500">places</span>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="p-6 rounded-xl bg-slate-50 border-2 border-slate-200 text-center">
-                    <i className="fas fa-info-circle text-slate-400 text-2xl mb-3" />
-                    <p className="text-slate-600 font-semibold">Discord account not linked yet</p>
-                    <p className="text-sm text-slate-500 mt-1">This user hasn't connected their Discord account</p>
-                  </div>
-                )}
-              </div>
 
-              {/* Ratings List */}
-              <div ref={connectRatingsRef} className="bg-white rounded-2xl shadow-lg border-2 border-slate-200 p-8">
-                <div className="flex items-center gap-3 mb-8">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg">
-                    <i className="fas fa-map-pin text-white text-lg" />
-                  </div>
-                  <h3 className="text-2xl font-bold text-slate-900">
-                    Rated Locations ({selectedRatings.length})
-                  </h3>
-                </div>
+                  {/* Discord Info Card */}
+                  <div ref={connectDiscordRef} className="bg-white rounded-2xl shadow-lg border-2 border-slate-200 p-8">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#5865F2] to-[#5865F2] flex items-center justify-center shadow-lg">
+                        <i className="fab fa-discord text-white text-lg" />
+                      </div>
+                      <h3 className="text-2xl font-bold text-slate-900">Discord Account</h3>
+                    </div>
 
-                {loadingConnectInfo ? (
-                  <div className="py-12 flex items-center justify-center text-slate-500">
-                    <i className="fas fa-spinner fa-spin text-2xl mr-3" />
-                    <span className="font-semibold">Loading ratings...</span>
-                  </div>
-                ) : connectError ? (
-                  <div className="text-center py-12">
-                    <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
-                      <i className="fas fa-exclamation-triangle text-2xl text-red-500" />
-                    </div>
-                    <p className="text-red-600 font-semibold">{connectError}</p>
-                  </div>
-                ) : selectedRatings.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                      <i className="fas fa-inbox text-slate-400 text-2xl" />
-                    </div>
-                    <p className="text-slate-500 font-medium">No ratings yet</p>
-                  </div>
-                ) : selectedRatings.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                      <i className="fas fa-inbox text-slate-400 text-2xl" />
-                    </div>
-                    <p className="text-slate-500 font-medium">No ratings yet</p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Calculate pagination */}
-                    {(() => {
-                      const totalPages = Math.ceil(selectedRatings.length / ratingsPerPage)
-                      const startIndex = (currentRatingsPage - 1) * ratingsPerPage
-                      const endIndex = startIndex + ratingsPerPage
-                      const currentRatings = selectedRatings.slice(startIndex, endIndex)
-                
-                      return (
-                        <>
-                          <div className="space-y-4 mb-8">
-                            {currentRatings.map((rating, index) => (
-                              <div
-                                key={rating.id}
-                                data-rating-card
-                                className="group p-6 rounded-xl border-2 border-slate-200 hover:border-indigo-300 hover:bg-slate-50 transition-all duration-300"
-                              >
-                                <div className="flex items-start justify-between mb-3">
-                                  <div className="flex items-center gap-3 flex-1">
-                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-md flex-shrink-0">
-                                      <i className="fas fa-map-marker-alt text-sm" />
-                                    </div>
-                                    <div className="flex-1">
-                                      <div className="flex items-center gap-2 mb-1">
-                                        <span className="font-bold text-slate-900">{rating.placeName}</span>
-                                      </div>
-                                      <p className="text-sm text-slate-500">{rating.placeAddress}</p>
-                                      <div className="text-xs text-slate-400 mt-1">
-                                        {new Date(rating.createdAt).toLocaleDateString('en-US', {
-                                          month: 'short',
-                                          day: 'numeric',
-                                          year: 'numeric'
-                                        })}
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div className="flex-shrink-0 text-right ml-4">
-                                    <div className="text-3xl font-black bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                                      {rating.overallScore.toFixed(1)}
-                                    </div>
-                                    <div className="text-xs text-slate-500 font-semibold">/ 10</div>
-                                  </div>
-                                </div>
+                    {loadingConnectInfo ? (
+                      <div className="py-8 flex items-center justify-center text-slate-500">
+                        <i className="fas fa-spinner fa-spin text-2xl mr-3" />
+                        <span className="font-semibold">Loading Discord info...</span>
+                      </div>
+                    ) : connectError ? (
+                      <div className="py-8 text-center">
+                        <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+                          <i className="fas fa-exclamation-triangle text-2xl text-red-500" />
+                        </div>
+                        <p className="text-red-600 font-semibold">{connectError}</p>
+                      </div>
+                    ) : selectedProfile?.discordId ? (
+                      <div className="p-6 rounded-xl bg-gradient-to-br from-[#5865F2]/10 to-purple-50 border-2 border-[#5865F2]/20">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="w-16 h-16 rounded-2xl bg-[#5865F2] flex items-center justify-center shadow-lg">
+                              <i className="fab fa-discord text-white text-2xl" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-1">Discord Username</p>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xl font-black text-slate-900">
+                                  {selectedProfile.discordUsername ? `@${selectedProfile.discordUsername}` : `@${selectedProfile.discordId}`}
+                                </span>
+                                {selectedProfile.discordVerified && (
+                                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
+                                    <i className="fas fa-check-circle" />
+                                    Verified
+                                  </span>
+                                )}
+                                <button
+                                  onClick={copyDiscordTag}
+                                  className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-purple-100 hover:text-purple-600 transition-all duration-200 text-sm font-semibold hover:scale-105"
+                                  title="Copy Discord tag"
+                                >
+                                  {copiedTag ? (
+                                    <>
+                                      <i className="fas fa-check mr-1" />
+                                      Copied
+                                    </>
+                                  ) : (
+                                    <>
+                                      <i className="fas fa-copy mr-1" />
+                                      Copy
+                                    </>
+                                  )}
+                                </button>
                               </div>
-                            ))}
+                            </div>
                           </div>
-                
-                          {/* Pagination Controls */}
-                          {totalPages > 1 && (
-                            <>
-                              <div className="flex items-center justify-center gap-2">
-                                {/* Previous Button */}
-                                <button
-                                  onClick={() => handleRatingsPageChange(currentRatingsPage - 1)}
-                                  disabled={currentRatingsPage === 1 || isRatingsAnimating}
-                                  className="group w-11 h-11 rounded-full font-bold transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed bg-gradient-to-br from-pink-100 to-pink-100 border-2 border-purple-200 hover:border-purple-400 hover:shadow-lg hover:scale-110 disabled:hover:scale-100 disabled:hover:border-purple-200 flex items-center justify-center"
-                                >
-                                  <i className="fas fa-chevron-left text-2xl text-purple-600 group-hover:text-purple-700 transition-colors" />
-                                </button>
-                
-                                {/* Page Numbers */}
-                                <div className="flex items-center gap-2">
-                                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
-                                    const showPage =
-                                      page === 1 ||
-                                      page === totalPages ||
-                                      (page >= currentRatingsPage - 1 && page <= currentRatingsPage + 1)
-                
-                                    const showEllipsis =
-                                      (page === 2 && currentRatingsPage > 3) ||
-                                      (page === totalPages - 1 && currentRatingsPage < totalPages - 2)
-                
-                                    if (!showPage && !showEllipsis) return null
-                
-                                    if (showEllipsis) {
-                                      return (
-                                        <span key={page} className="px-3 py-2 text-slate-400">
-                                          ...
-                                        </span>
-                                      )
-                                    }
-                
-                                    return (
-                                      <button
-                                        key={page}
-                                        onClick={() => handleRatingsPageChange(page)}
-                                        disabled={isRatingsAnimating}
-                                        className={`w-11 h-11 rounded-full font-bold transition-all duration-300 disabled:cursor-wait ${
-                                          page === currentRatingsPage
-                                            ? 'bg-gradient-to-br from-pink-200 to-pink-700 text-white shadow-lg scale-110'
-                                            : 'bg-gradient-to-br from-blue-100 to-pink-100 border-2 border-purple-200 text-purple-700 hover:border-purple-400 hover:shadow-lg hover:scale-105'
-                                        }`}
-                                      >
-                                        {page}
-                                      </button>
-                                    )
-                                  })}
-                                </div>
-                
-                                {/* Next Button */}
-                                <button
-                                  onClick={() => handleRatingsPageChange(currentRatingsPage + 1)}
-                                  disabled={currentRatingsPage === totalPages || isRatingsAnimating}
-                                  className="group w-11 h-11 rounded-full font-bold transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed bg-gradient-to-br from-blue-100 to-pink-100 border-2 border-purple-200 hover:border-purple-400 hover:shadow-lg hover:scale-110 disabled:hover:scale-100 disabled:hover:border-purple-200 flex items-center justify-center"
-                                >
-                                  <i className="fas fa-chevron-right text-2xl text-purple-600 group-hover:text-purple-700 transition-colors" />
-                                </button>
-                              </div>
-                
-                              {/* Page Info */}
-                              <div className="text-center mt-6 text-sm text-slate-500">
-                                Showing {startIndex + 1}-{Math.min(endIndex, selectedRatings.length)} of {selectedRatings.length} ratings
-                              </div>
-                            </>
-                          )}
-                        </>
-                      )
-                    })()}
-                  </>
-                )}
-              </div>
-            </main>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-6 rounded-xl bg-slate-50 border-2 border-slate-200 text-center">
+                        <i className="fas fa-info-circle text-slate-400 text-2xl mb-3" />
+                        <p className="text-slate-600 font-semibold">Discord account not linked yet</p>
+                        <p className="text-sm text-slate-500 mt-1">This user hasn't connected their Discord account</p>
+                      </div>
+                    )}
+                  </div>
 
-            <style>{`
+                  {/* Ratings List */}
+                  <div ref={connectRatingsRef} className="bg-white rounded-2xl shadow-lg border-2 border-slate-200 p-8">
+                    <div className="flex items-center gap-3 mb-8">
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg">
+                        <i className="fas fa-map-pin text-white text-lg" />
+                      </div>
+                      <h3 className="text-2xl font-bold text-slate-900">
+                        Rated Locations ({selectedRatings.length})
+                      </h3>
+                    </div>
+
+                    {loadingConnectInfo ? (
+                      <div className="py-12 flex items-center justify-center text-slate-500">
+                        <i className="fas fa-spinner fa-spin text-2xl mr-3" />
+                        <span className="font-semibold">Loading ratings...</span>
+                      </div>
+                    ) : connectError ? (
+                      <div className="text-center py-12">
+                        <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+                          <i className="fas fa-exclamation-triangle text-2xl text-red-500" />
+                        </div>
+                        <p className="text-red-600 font-semibold">{connectError}</p>
+                      </div>
+                    ) : selectedRatings.length === 0 ? (
+                      <div className="text-center py-12">
+                        <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                          <i className="fas fa-inbox text-slate-400 text-2xl" />
+                        </div>
+                        <p className="text-slate-500 font-medium">No ratings yet</p>
+                      </div>
+                    ) : selectedRatings.length === 0 ? (
+                      <div className="text-center py-12">
+                        <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                          <i className="fas fa-inbox text-slate-400 text-2xl" />
+                        </div>
+                        <p className="text-slate-500 font-medium">No ratings yet</p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Calculate pagination */}
+                        {(() => {
+                          const totalPages = Math.ceil(selectedRatings.length / ratingsPerPage)
+                          const startIndex = (currentRatingsPage - 1) * ratingsPerPage
+                          const endIndex = startIndex + ratingsPerPage
+                          const currentRatings = selectedRatings.slice(startIndex, endIndex)
+
+                          return (
+                            <>
+                              <div className="space-y-4 mb-8">
+                                {currentRatings.map((rating, index) => (
+                                  <div
+                                    key={rating.id}
+                                    data-rating-card
+                                    className="group p-6 rounded-xl border-2 border-slate-200 hover:border-indigo-300 hover:bg-slate-50 transition-all duration-300"
+                                  >
+                                    <div className="flex items-start justify-between mb-3">
+                                      <div className="flex items-center gap-3 flex-1">
+                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-md flex-shrink-0">
+                                          <i className="fas fa-map-marker-alt text-sm" />
+                                        </div>
+                                        <div className="flex-1">
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <span className="font-bold text-slate-900">{rating.placeName}</span>
+                                          </div>
+                                          <p className="text-sm text-slate-500">{rating.placeAddress}</p>
+                                          <div className="text-xs text-slate-400 mt-1">
+                                            {new Date(rating.createdAt).toLocaleDateString('en-US', {
+                                              month: 'short',
+                                              day: 'numeric',
+                                              year: 'numeric'
+                                            })}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="flex-shrink-0 text-right ml-4">
+                                        <div className="text-3xl font-black bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                                          {rating.overallScore.toFixed(1)}
+                                        </div>
+                                        <div className="text-xs text-slate-500 font-semibold">/ 10</div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Pagination Controls */}
+                              {totalPages > 1 && (
+                                <>
+                                  <div className="flex items-center justify-center gap-2">
+                                    {/* Previous Button */}
+                                    <button
+                                      onClick={() => handleRatingsPageChange(currentRatingsPage - 1)}
+                                      disabled={currentRatingsPage === 1 || isRatingsAnimating}
+                                      className="group w-11 h-11 rounded-full font-bold transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed bg-gradient-to-br from-pink-100 to-pink-100 border-2 border-purple-200 hover:border-purple-400 hover:shadow-lg hover:scale-110 disabled:hover:scale-100 disabled:hover:border-purple-200 flex items-center justify-center"
+                                    >
+                                      <i className="fas fa-chevron-left text-2xl text-purple-600 group-hover:text-purple-700 transition-colors" />
+                                    </button>
+
+                                    {/* Page Numbers */}
+                                    <div className="flex items-center gap-2">
+                                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                                        const showPage =
+                                          page === 1 ||
+                                          page === totalPages ||
+                                          (page >= currentRatingsPage - 1 && page <= currentRatingsPage + 1)
+
+                                        const showEllipsis =
+                                          (page === 2 && currentRatingsPage > 3) ||
+                                          (page === totalPages - 1 && currentRatingsPage < totalPages - 2)
+
+                                        if (!showPage && !showEllipsis) return null
+
+                                        if (showEllipsis) {
+                                          return (
+                                            <span key={page} className="px-3 py-2 text-slate-400">
+                                              ...
+                                            </span>
+                                          )
+                                        }
+
+                                        return (
+                                          <button
+                                            key={page}
+                                            onClick={() => handleRatingsPageChange(page)}
+                                            disabled={isRatingsAnimating}
+                                            className={`w-11 h-11 rounded-full font-bold transition-all duration-300 disabled:cursor-wait ${page === currentRatingsPage
+                                                ? 'bg-gradient-to-br from-pink-200 to-pink-700 text-white shadow-lg scale-110'
+                                                : 'bg-gradient-to-br from-blue-100 to-pink-100 border-2 border-purple-200 text-purple-700 hover:border-purple-400 hover:shadow-lg hover:scale-105'
+                                              }`}
+                                          >
+                                            {page}
+                                          </button>
+                                        )
+                                      })}
+                                    </div>
+
+                                    {/* Next Button */}
+                                    <button
+                                      onClick={() => handleRatingsPageChange(currentRatingsPage + 1)}
+                                      disabled={currentRatingsPage === totalPages || isRatingsAnimating}
+                                      className="group w-11 h-11 rounded-full font-bold transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed bg-gradient-to-br from-blue-100 to-pink-100 border-2 border-purple-200 hover:border-purple-400 hover:shadow-lg hover:scale-110 disabled:hover:scale-100 disabled:hover:border-purple-200 flex items-center justify-center"
+                                    >
+                                      <i className="fas fa-chevron-right text-2xl text-purple-600 group-hover:text-purple-700 transition-colors" />
+                                    </button>
+                                  </div>
+
+                                  {/* Page Info */}
+                                  <div className="text-center mt-6 text-sm text-slate-500">
+                                    Showing {startIndex + 1}-{Math.min(endIndex, selectedRatings.length)} of {selectedRatings.length} ratings
+                                  </div>
+                                </>
+                              )}
+                            </>
+                          )
+                        })()}
+                      </>
+                    )}
+                  </div>
+                </main>
+
+                <style>{`
               @keyframes fadeInUp {
                 from {
                   opacity: 0;
@@ -1288,9 +1410,9 @@ export const Explore: React.FC = () => {
                 }
               }
             `}</style>
-          </div>
+              </div>
+            </div>
+          )}
         </div>
-      )}
-    </div>
-  )
+        )
 }
