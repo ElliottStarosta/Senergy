@@ -10,7 +10,7 @@ export const api = axios.create({
   withCredentials: true, // Important for cookies/sessions
 });
 
-console.log(import.meta.env.VITE_API_URL)
+console.log('Environment:', import.meta.env.VITE_API_URL)
 
 // Request interceptor (optional - for adding auth tokens)
 api.interceptors.request.use(
