@@ -65,23 +65,42 @@ export class QuizService {
     // If average is 1 (max introvert), AF should be -1
     const adjustmentFactor = (average - 3) / 2
 
+    // Debug logging to help diagnose calculation issues
+    console.log('[Quiz] Personality calculation:', {
+      responses: responses.join(','),
+      weightedSum,
+      totalWeight,
+      average: average.toFixed(2),
+      adjustmentFactor: adjustmentFactor.toFixed(3)
+    })
+
     // Determine personality type
+    // Adjusted thresholds to better distribute results and fix extrovert classification:
+    // - Strong Introvert: AF <= -0.5
+    // - Moderate Introvert: -0.5 < AF <= -0.15
+    // - Ambivert: -0.15 < AF <= 0.15 (balanced middle range)
+    // - Moderate Extrovert: 0.15 < AF <= 0.5
+    // - Strong Extrovert: AF > 0.5
+    // 
+    // Example: Maximum extrovert responses (all 5s) = AF = 1.0 → Strong Extrovert ✓
+    //          Moderate extrovert (avg 4) = AF = 0.5 → Moderate Extrovert ✓
+    //          Slight extrovert (avg 3.3) = AF = 0.15 → Ambivert ✓
     let personalityType: string
     let description: string
 
-    if (adjustmentFactor <= -0.6) {
+    if (adjustmentFactor <= -0.5) {
       personalityType = 'Strong Introvert'
       description =
         'You recharge through solitude and prefer quieter, more intimate social settings. Large gatherings may feel overwhelming, but you thrive in meaningful one-on-one conversations.'
-    } else if (adjustmentFactor <= -0.2) {
+    } else if (adjustmentFactor <= -0.15) {
       personalityType = 'Moderate Introvert'
       description =
         'You enjoy social interaction but need quiet time to recharge. You prefer smaller groups and deeper conversations over large parties.'
-    } else if (adjustmentFactor <= 0.2) {
+    } else if (adjustmentFactor <= 0.15) {
       personalityType = 'Ambivert'
       description =
         'You have a balanced approach to social energy. You can adapt to various situations and enjoy both social gatherings and quiet time.'
-    } else if (adjustmentFactor <= 0.6) {
+    } else if (adjustmentFactor <= 0.5) {
       personalityType = 'Moderate Extrovert'
       description =
         "You're energized by social interaction and enjoy group activities. You're comfortable in the spotlight but also appreciate quieter moments."

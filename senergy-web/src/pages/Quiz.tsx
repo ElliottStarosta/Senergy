@@ -182,6 +182,21 @@ export const Quiz: React.FC = () => {
     console.log('📝 Submitting quiz with token:', token?.substring(0, 20) + '...')
 
     try {
+      // Map shuffled responses back to the original question order for the backend
+      // Backend expects responses in the order of QUIZ_QUESTIONS (id 1..N)
+      const orderedResponses: number[] = new Array(questions.length).fill(0)
+      questions.forEach((q, idx) => {
+        // Question ids are 1-based, array index is 0-based
+        const targetIndex = (q.id ?? idx + 1) - 1
+        orderedResponses[targetIndex] = responses[idx]
+      })
+
+      console.log('Quiz submission mapping:', {
+        shuffledOrder: questions.map((q) => q.id),
+        responsesShuffled: responses,
+        responsesOrdered: orderedResponses,
+      })
+
       // CRITICAL: Ensure Discord ID is linked before submitting quiz
       const retryDiscordId = sessionStorage.getItem('retryDiscordLink') || sessionStorage.getItem('pendingDiscordId')
       if (retryDiscordId && token) {
@@ -210,7 +225,7 @@ export const Quiz: React.FC = () => {
 
       const response = await axios.post(
         '/api/quiz/submit',
-        { responses },
+        { responses: orderedResponses },
         {
           headers: { Authorization: `Bearer ${token}` },
         }

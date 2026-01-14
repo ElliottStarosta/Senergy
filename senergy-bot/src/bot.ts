@@ -596,8 +596,10 @@ async function handleRegister(interaction: any) {
         .setURL(`${frontendUrl}/register?discordId=${interaction.user.id}`)
     )
   
+  console.log('Register button URL:', `${frontendUrl}/register?discordId=${interaction.user.id}`)
   await interaction.reply({ embeds: [embed], components: [button], ephemeral: true })
 }
+
 
 async function handleVerify(interaction: any, code: string) {
   // Defer reply immediately (works in both DMs and guilds)
