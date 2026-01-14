@@ -17,6 +17,13 @@ dotenv.config()
 export function createServer(): Express {
   const app = express()
 
+  const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'https://senergy-85a7.vercel.app',
+    process.env.FRONTEND_URL, // Keep your env variable too
+  ].filter(Boolean); // Remove undefined values
+
   // Middleware
   app.use(express.json({ limit: '10mb' }))
   app.use(express.urlencoded({ limit: '10mb', extended: true }))
@@ -24,12 +31,22 @@ export function createServer(): Express {
   // CORS
   app.use(
     cors({
-      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+      origin: function (origin, callback) {
+        // Allow requests with no origin (mobile apps, Postman, etc.)
+        if (!origin) return callback(null, true);
+        
+        // Check if origin is in allowed list or is a Vercel deployment
+        if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+          callback(null, true);
+        } else {
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
       credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
       allowedHeaders: ['Content-Type', 'Authorization'],
     })
-  )
+  );
 
   // Logging
   app.use(requestLogger)
