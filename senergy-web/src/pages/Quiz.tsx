@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
-import axios from 'axios'
 import gsap from 'gsap'
+import api from '@/api/config'
 
 interface QuizQuestion {
   id: number
@@ -66,7 +66,7 @@ export const Quiz: React.FC = () => {
         console.log('Token:', token?.substring(0, 30))
 
         try {
-          const response = await axios.post('/api/auth/discord/link',
+          const response = await api.post('/api/auth/discord/link',
             { discordId: retryDiscordId },
             {
               headers: {
@@ -93,7 +93,7 @@ export const Quiz: React.FC = () => {
   useEffect(() => {
     const fetchQuestions = async () => {
       try {
-        const response = await axios.get('/api/quiz/questions', {
+        const response = await api.get('/api/quiz/questions', {
           headers: { Authorization: `Bearer ${token}` },
         })
         const data: QuizQuestion[] =
@@ -202,7 +202,7 @@ export const Quiz: React.FC = () => {
       if (retryDiscordId && token) {
         console.log('🔗 Linking Discord ID before quiz submission:', retryDiscordId)
         try {
-          await axios.post('/api/auth/discord/link',
+          await api.post('/api/auth/discord/link',
             { discordId: retryDiscordId },
             {
               headers: {
@@ -223,7 +223,7 @@ export const Quiz: React.FC = () => {
         }
       }
 
-      const response = await axios.post(
+      const response = await api.post(
         '/api/quiz/submit',
         { responses: orderedResponses },
         {
