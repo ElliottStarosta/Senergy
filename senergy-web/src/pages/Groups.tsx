@@ -84,10 +84,13 @@ const PlaceCard: React.FC<{
   idx: number;
   navigate: any;
   currentGroupId: string;
-}> = ({ place, idx, navigate, currentGroupId }) => {
+  realTimeScore?: number;  
+}> = ({ place, idx, navigate, currentGroupId, realTimeScore  }) => {
   const [expanded, setExpanded] = React.useState(false);
   const expandRef = React.useRef<HTMLDivElement>(null);
   const iconRef = React.useRef<HTMLDivElement>(null);
+  const displayScore = realTimeScore !== undefined ? realTimeScore : place.predictedScore
+
 
   
 
@@ -163,7 +166,7 @@ const PlaceCard: React.FC<{
         <div className="grid grid-cols-2 gap-3">
           <div className={`px-4 py-3 rounded-xl bg-gradient-to-br ${getScoreColors(idx).score} shadow-md`}>
             <div className="text-[10px] font-semibold text-white/80 uppercase tracking-wide mb-1">Score</div>
-            <div className="font-bold text-2xl font-black text-white">{place.predictedScore.toFixed(1)}</div>
+            <div className="font-bold text-2xl font-black text-white">{displayScore.toFixed(1)}</div>
           </div>
           <div className={`px-4 py-3 rounded-xl bg-gradient-to-br ${getScoreColors(idx).conf} shadow-md`}>
             <div className="text-[10px] font-semibold text-white/80 uppercase tracking-wide mb-1">Match</div>
@@ -195,7 +198,7 @@ const PlaceCard: React.FC<{
                   <i className="fas fa-chart-line text-indigo-500 text-sm" />
                   <div>
                     <div className="text-[10px] text-slate-600 font-semibold">Avg Rating</div>
-                    <div className="font-bold text-lg font-black text-slate-900">{place.predictedScore.toFixed(1)}/10</div>
+                    <div className="font-bold text-lg font-black text-slate-900">{displayScore.toFixed(1)}/10</div>
                   </div>
                 </div>
               </div>
@@ -321,6 +324,7 @@ export const Groups: React.FC = () => {
   const [groupStats, setGroupStats] = useState<GroupStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null)
+  const [placeScores, setPlaceScores] = useState<{ [placeId: string]: number }>({})
 
   // Filter state
   const [selectedFilters, setSelectedFilters] = useState<Set<string>>(new Set(['all']))
@@ -397,6 +401,37 @@ export const Groups: React.FC = () => {
   };
 
   // Firebase listener for groups list
+
+  // Fetch real-time scores for recommended places
+useEffect(() => {
+  if (!currentGroup?.recommendedPlaces || !user?.id) return
+
+  const fetchScores = async () => {
+    const scores: { [placeId: string]: number } = {}
+
+    // Guard for undefined recommendedPlaces
+    const places = currentGroup?.recommendedPlaces ?? [];
+    for (const place of places) {
+      try {
+        const response = await api.get(`/api/ratings/place/${place.placeId}?userId=${user.id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        
+        if (response.data.success && response.data.data.stats) {
+          scores[place.placeId] = response.data.data.stats.avgOverallScore || place.predictedScore
+        }
+      } catch (error) {
+        console.error(`Failed to fetch score for ${place.placeId}:`, error)
+        scores[place.placeId] = place.predictedScore // Fallback to predicted
+      }
+    }
+    
+    setPlaceScores(scores)
+  }
+
+  fetchScores()
+}, [currentGroup?.recommendedPlaces, user?.id, token])
+
   useEffect(() => {
     if (!user?.id || stage !== STAGE.LIST) return
 
@@ -1183,6 +1218,7 @@ export const Groups: React.FC = () => {
                     idx={idx}
                     navigate={navigate}
                     currentGroupId={currentGroup.id}
+                    realTimeScore={placeScores[place.placeId]}
                   />
                 ))}
               </div>
@@ -1212,7 +1248,8 @@ export const Groups: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-3 flex-shrink-0">
                           <div className="text-right">
-                            <div className="text-lg font-black text-indigo-600">{place.predictedScore.toFixed(1)}</div>
+                            <div className="text-lg font-black text-indigo-600">{(placeScores[place.placeId] || place.predictedScore).toFixed(1)}
+                            </div>
                             <div className="text-[10px] text-slate-500 font-semibold">Score</div>
                           </div>
                           <div className="text-right">
