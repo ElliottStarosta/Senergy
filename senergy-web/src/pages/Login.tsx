@@ -3,8 +3,8 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
 import { auth } from '@/services/firebase'
-import axios from 'axios'
 import gsap from 'gsap'
+import api from '@/api/config'
 
 export const Login: React.FC = () => {
   const navigate = useNavigate()
@@ -48,7 +48,8 @@ export const Login: React.FC = () => {
       console.log('[Login] Got Firebase ID token, sending to backend...')
 
       // Send token to backend
-      const response = await axios.post('/api/auth/google', { token: firebaseIdToken })
+      const response = await api.post('/api/auth/google', { token: firebaseIdToken })
+      console.log("REPOSNE TO LOG: ", response);
 
       console.log('[Login] Backend response received, token:', response.data.token.substring(0, 50) + '...')
 
@@ -59,7 +60,7 @@ export const Login: React.FC = () => {
       // Manually verify the token with the backend
       console.log('[Login] Verifying token with backend...')
       try {
-        const verifyResponse = await axios.get('/api/auth/verify', {
+        const verifyResponse = await api.get('/api/auth/verify', {
           headers: { Authorization: `Bearer ${response.data.token}` },
         })
         
