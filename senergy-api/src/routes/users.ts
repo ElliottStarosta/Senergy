@@ -167,6 +167,62 @@ router.get('/discord/:discordId/profile', async (req: Request, res: Response) =>
 
 
 /**
+ * PATCH /api/users/:userId
+ * Update user profile (including location)
+ */
+router.patch('/:userId', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params
+    const requestingUserId = req.userId!
+    
+    // Only allow users to update their own profile
+    if (userId !== requestingUserId) {
+      return res.status(403).json({
+        success: false,
+        error: 'You can only update your own profile',
+      })
+    }
+
+    const updates: any = {}
+    
+    // Allow updating lastRatedPlaceLocation
+    if (req.body.lastRatedPlaceLocation) {
+      const { lat, lng } = req.body.lastRatedPlaceLocation
+      if (typeof lat === 'number' && typeof lng === 'number') {
+        updates.lastRatedPlaceLocation = { lat, lng }
+        console.log('[Users] Updating location for user:', userId, updates.lastRatedPlaceLocation)
+      }
+    }
+
+    // Allow updating other safe fields
+    if (req.body.displayName) updates.displayName = req.body.displayName
+    if (req.body.avatar) updates.avatar = req.body.avatar
+    if (req.body.city) updates.city = req.body.city
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No valid updates provided',
+      })
+    }
+
+    await db.collection('users').doc(userId).update(updates)
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      updates,
+    })
+  } catch (error: any) {
+    console.error('Update user error:', error)
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to update profile',
+    })
+  }
+})
+
+/**
  * GET /api/users/:userId/profile
  * Get public user profile (for matching)
  */

@@ -1159,21 +1159,46 @@ export const Rate: React.FC = () => {
           {/* Segment 3: Success */}
           {segment === 3 && (
             <div ref={segmentRef} className="text-center py-12">
+              {/* Animated Success Icon */}
               <div
                 ref={successIconRef}
-                className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-500 flex items-center justify-center mx-auto mb-6"
+                className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-500 flex items-center justify-center mx-auto mb-6 shadow-xl shadow-emerald-500/30"
               >
-                <i ref={successCheckRef} className="fas fa-check text-white text-3xl" />
+                <i ref={successCheckRef} className="fas fa-check text-white text-4xl" />
               </div>
-              <h3 ref={successTitleRef} className="text-3xl font-bold text-slate-900 mb-2">
+
+              {/* Success Title */}
+              <h3 ref={successTitleRef} className="text-4xl font-bold text-slate-900 mb-3">
                 Rating Saved!
               </h3>
-              <p ref={successDescRef} className="text-slate-600 mb-6">
+
+              {/* Success Description */}
+              <p ref={successDescRef} className="text-lg text-slate-600 mb-8">
                 Your feedback helps the whole crew find better spots.
               </p>
-              <p ref={successRedirectRef} className="text-sm text-slate-500">
-                Redirecting to dashboard...
-              </p>
+
+              {/* Loading Spinner & Redirect Message */}
+              <div ref={successRedirectRef} className="space-y-4">
+                <div className="flex items-center justify-center gap-3">
+                  <div
+                    className="w-6 h-6 border-4 border-indigo-200 border-t-indigo-600 rounded-full"
+                    ref={(el) => {
+                      if (el) {
+                        gsap.to(el, {
+                          rotation: 360,
+                          duration: 1.2,
+                          repeat: -1,
+                          ease: 'linear'
+                        })
+                      }
+                    }}
+                  />
+                  <p className="text-sm font-medium text-slate-600">
+                    Redirecting to dashboard...
+                  </p>
+                </div>
+
+              </div>
             </div>
           )}
         </div>

@@ -7,8 +7,8 @@ import gsap from 'gsap'
 import Snowfall from 'react-snowfall'
 import { getCountFromServer } from 'firebase/firestore'
 import { AnimatedLogo } from '@/components/dashboard/AnimatedLogo'
-import axios from 'axios'
-
+import { getHighPrecisionLocation } from '@/services/location'
+import api from '@/api/config'
 
 interface Rating {
   id: string
@@ -29,7 +29,7 @@ interface Group {
 }
 
 export const Dashboard: React.FC = () => {
-  const { user, logout } = useAuth()
+  const { user, logout, token } = useAuth()
   const navigate = useNavigate()
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -37,6 +37,32 @@ export const Dashboard: React.FC = () => {
   const [recentGroups, setRecentGroups] = useState<Group[]>([])
   const [stats, setStats] = useState({ totalRatings: 0, totalGroups: 0, avgScore: 0 })
   const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const updateUserLocation = async () => {
+      if (!user?.id || !token) return
+  
+      try {
+        console.log('[Dashboard] Fetching user location...')
+        const location = await getHighPrecisionLocation()
+        
+        console.log('[Dashboard] Location obtained:', location)
+        console.log('[Dashboard] Updating user location in Firebase...')
+        
+        await api.patch(`/api/users/${user.id}`, 
+          { lastRatedPlaceLocation: { lat: location.lat, lng: location.lng } },
+          { headers: { 'Authorization': `Bearer ${token}` } }
+        )
+        
+        console.log('[Dashboard] ✅ Location updated successfully')
+      } catch (error) {
+        console.warn('[Dashboard] ⚠️ Could not update location:', error)
+        // Don't block dashboard if location fails
+      }
+    }
+  
+    updateUserLocation()
+  }, [user?.id, token])
 
   // Load real data from Firestore
   useEffect(() => {

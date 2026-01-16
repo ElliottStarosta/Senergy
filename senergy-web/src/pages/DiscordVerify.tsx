@@ -294,7 +294,7 @@ export const DiscordVerify: React.FC = () => {
     }
   }, [verificationCode])
 
-  // Smooth color transition animation when copied state changes
+  // Smooth color tansition animation when copied state changes
   useEffect(() => {
     if (!codeBoxRef.current) return
 
@@ -482,7 +482,7 @@ export const DiscordVerify: React.FC = () => {
 
     let pollInterval: NodeJS.Timeout
     let pollCount = 0
-    const MAX_POLLS = 60 // Poll for 2 minutes
+    const MAX_POLLS = 180 // Poll for 2 minutes
 
     const checkVerificationStatus = async () => {
       try {

@@ -403,37 +403,9 @@ router.post('/discord/verify-complete', async (req: Request, res: Response) => {
       })
     }
 
-    const codeDoc = await db.collection('verificationCodes').doc(verificationCode).get()
-    
-    if (!codeDoc.exists) {
-      return res.status(404).json({ 
-        success: false,
-        error: 'Invalid verification code' 
-      })
-    }
-
-    const codeData = codeDoc.data()
-    const userId = codeData?.userId
-
-    if (!userId) {
-      return res.status(400).json({ 
-        success: false,
-        error: 'Invalid code data' 
-      })
-    }
-
-    await db.collection('users').doc(userId).update({
-      discordVerified: true,
-      discordId: discordId,
-    })
-
-    await db.collection('verificationCodes').doc(verificationCode).delete()
-
-    console.log('[Auth] Discord verification completed for user:', userId)
 
     res.json({
       success: true,
-      userId,
       message: 'Discord verification completed'
     })
   } catch (error: any) {

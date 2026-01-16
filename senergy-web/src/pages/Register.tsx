@@ -64,6 +64,22 @@ export const Register: React.FC = () => {
   }
 
   useEffect(() => {
+    const fetchLocation = async () => {
+      try {
+        setLocationLoading(true)
+        const location = await getHighPrecisionLocation()
+        setUserLocation({lat: location.lat, lng: location.lng})
+      } catch (error) {
+
+      } finally {
+        setLocationLoading(false)
+      }
+    }
+
+    fetchLocation()
+  }, [])
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const discordId = params.get('discordId')
     

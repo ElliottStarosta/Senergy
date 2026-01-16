@@ -181,19 +181,13 @@ export async function registerCommands() {
 
     console.log(`Started refreshing ${commands.length} application commands...`)
 
-    if (GUILD_ID) {
-      await rest.put(
-        Routes.applicationGuildCommands(CLIENT_ID!, GUILD_ID),
-        { body: commands }
-      )
-      console.log(`✅ Registered commands in guild ${GUILD_ID}`)
-    } else {
-      await rest.put(
-        Routes.applicationCommands(CLIENT_ID!),
-        { body: commands }
-      )
-      console.log('✅ Registered commands globally')
-    }
+    // GLOBAL registration (works in all servers, takes ~1 hour to propagate)
+    await rest.put(
+      Routes.applicationCommands(CLIENT_ID!),
+      { body: commands }
+    )
+    console.log('✅ Registered commands globally (will take ~1 hour to appear in new servers)')
+
   } catch (error) {
     console.error('Failed to register commands:', error)
     throw error
@@ -219,6 +213,16 @@ client.on('ready', () => {
 client.on('guildCreate', async (guild: any) => {
   console.log(`🎉 Bot added to server: ${guild.name}`)
   
+  try {
+    const rest = new REST().setToken(TOKEN!)
+
+    await rest.put(
+      Routes.applicationGuildCommands(GUILD_ID!,guild.id), {body: commands}
+    )
+    console.log(`Registered commands in ${guild.name} (instant)`)
+  } catch (error) {
+    console.error("Failed to register commands: ", error)
+  }
   try {
     const channel = guild.systemChannel || guild.channels.cache.find((ch: any) => ch.isTextBased())
     if (channel?.isTextBased()) {
@@ -602,19 +606,26 @@ async function handleRegister(interaction: any) {
 
 
 async function handleVerify(interaction: any, code: string) {
-  // Defer reply immediately (works in both DMs and guilds)
   await interaction.deferReply({ ephemeral: true })
 
   console.log(`[Verify] Attempting verification for user ${interaction.user.tag} with code: ${code}`)
+  console.log(`[Verify] Discord ID: ${interaction.user.id}`)
   console.log(`[Verify] In guild: ${!!interaction.guild}`)
 
   try {
-    // Call the backend API to verify
+    console.log(`[Verify] Sending request to backend...`)
     const response = await api.client.post('/api/auth/discord', {
       discordId: interaction.user.id,
       verificationCode: code,
     })
 
+    console.log(`[Verify] Backend response received:`, response.data)
+
+    if (!response.data || !response.data.token) {
+      throw new Error('Invalid response from server')
+    }
+
+    // Notify backend that verification is complete
     try {
       await api.client.post('/api/auth/discord/verify-complete', {
         discordId: interaction.user.id,
@@ -623,12 +634,6 @@ async function handleVerify(interaction: any, code: string) {
       console.log(`[Verify] Verification completion notification sent`)
     } catch (notifyError) {
       console.error(`[Verify] Failed to send completion notification:`, notifyError)
-    }
-
-    console.log(`[Verify] Backend response received:`, response.data)
-
-    if (!response.data || !response.data.token) {
-      throw new Error('Invalid response from server')
     }
 
     // Success embed
@@ -651,24 +656,38 @@ async function handleVerify(interaction: any, code: string) {
     console.log(`[Verify] Success message sent`)
 
   } catch (error: any) {
-    console.error('[Verify] Verification failed:', error)
-    console.error('[Verify] Error details:', error.response?.data || error.message)
+    console.error('[Verify] Verification failed:', error.message)
+    
+    // ✅ LOG THE FULL ERROR RESPONSE FROM BACKEND
+    if (error.response) {
+      console.error('[Verify] Backend status:', error.response.status)
+      console.error('[Verify] Backend error data:', JSON.stringify(error.response.data, null, 2))
+      console.error('[Verify] Backend headers:', error.response.headers)
+    } else {
+      console.error('[Verify] No response from backend - network error?')
+      console.error('[Verify] Error stack:', error.stack)
+    }
 
-    // Error embed
+    // Determine error message based on backend response
+    let errorMessage = '**This could mean:**\n' +
+      '• Invalid or expired code\n' +
+      '• You haven\'t completed the quiz yet\n' +
+      '• Code was already used\n\n' +
+      '**To fix this:**\n' +
+      '1. Go to the web app and log in\n' +
+      '2. Complete the personality quiz\n' +
+      '3. You\'ll receive a new verification code\n' +
+      '4. Use `/verify [code]` here or in my DMs'
+
+    // Add specific error from backend if available
+    if (error.response?.data?.error) {
+      errorMessage = `**Error:** ${error.response.data.error}\n\n` + errorMessage
+    }
+
     const embed = new EmbedBuilder()
       .setColor(0xef4444)
       .setTitle('❌ Verification Failed')
-      .setDescription(
-        '**This could mean:**\n' +
-        '• Invalid or expired code\n' +
-        '• You haven\'t completed the quiz yet\n' +
-        '• Code was already used\n\n' +
-        '**To fix this:**\n' +
-        '1. Go to the web app\n' +
-        '2. Complete the personality quiz\n' +
-        '3. Get your new verification code\n' +
-        '4. Use `/verify [code]` here or in my DMs'
-      )
+      .setDescription(errorMessage)
 
     const button = new ActionRowBuilder<ButtonBuilder>()
       .addComponents(

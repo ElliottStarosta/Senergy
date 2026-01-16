@@ -141,7 +141,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [])
 
-  const register = useCallback(async (email: string, password: string, displayName: string, location?: { lat: number; lng: number } | null) => {
+  const register = useCallback(async (
+    email: string, 
+    password: string, 
+    displayName: string, 
+    location?: { lat: number; lng: number } | null
+  ) => {
     setState(prev => ({ ...prev, isLoading: true, error: null }))
     try {
       const response = await api.post('/api/auth/register', { 
@@ -151,8 +156,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         location: location || null
       })
       const { user, token } = response.data
-
+  
       localStorage.setItem('auth_token', token)
+      
+      console.log('✅ Registration successful', location ? 'with location' : 'without location')
+      
       setState({
         user,
         token,

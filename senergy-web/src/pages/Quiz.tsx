@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import gsap from 'gsap'
 import api from '@/api/config'
+import { getHighPrecisionLocation } from '@/services/location'
+
 
 interface QuizQuestion {
   id: number
@@ -41,7 +43,7 @@ const shuffleArray = <T,>(array: T[]): T[] => {
 
 export const Quiz: React.FC = () => {
   const navigate = useNavigate()
-  const { token, updateUserProfile } = useAuth()
+  const { token, updateUserProfile, user } = useAuth()
   const containerRef = useRef<HTMLDivElement>(null)
 
   const [questions, setQuestions] = useState<QuizQuestion[]>([])
@@ -54,7 +56,20 @@ export const Quiz: React.FC = () => {
   const questionRef = useRef<HTMLDivElement>(null)
   const optionsRef = useRef<HTMLDivElement>(null)
   const [isTransitioning, setIsTransitioning] = useState(false)
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
 
+
+  useEffect(() => {
+    const fetchLocation = async () => {
+      try {
+        const location = await getHighPrecisionLocation()
+        setUserLocation({lat: location.lat, lng: location.lng})
+      } catch(error) {
+        console.warn("Quiz page could not get user location")
+      }
+    }
+    fetchLocation()
+  }, [])
 
   useEffect(() => {
     const retryDiscordLink = async () => {
@@ -216,6 +231,19 @@ export const Quiz: React.FC = () => {
           sessionStorage.removeItem('pendingDiscordId')
           // Wait a moment for the database to update
           await new Promise(resolve => setTimeout(resolve, 500))
+
+          if (userLocation && token) {
+            try {
+              console.log('📍 Updating user location after Discord link:', userLocation)
+              await api.patch(`/api/users/${user?.id}`, 
+                { lastRatedPlaceLocation: userLocation },
+                { headers: { 'Authorization': `Bearer ${token}` } }
+              )
+              console.log('✅ Location updated successfully')
+            } catch (locationError) {
+              console.error('❌ Failed to update location:', locationError)
+            }
+          }
         } catch (linkError: any) {
           console.error('❌ Failed to link Discord ID before quiz submission:', linkError)
           console.error('Error response:', linkError.response?.data)

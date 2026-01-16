@@ -388,6 +388,7 @@ export class AuthService {
     try {
       // Find user by Discord ID
       const snapshot = await db.collection('users').where('discordId', '==', discordId).get()
+      console.log("USER TO AUTHENTICATE", snapshot.docs[0].data() as User)
 
       if (snapshot.empty) {
         throw new Error('Discord account not linked. Please register and verify your Discord account first.')
@@ -400,7 +401,7 @@ export class AuthService {
       if (verificationCode) {
         // Check verification codes collection
         const codeDoc = await db.collection('verificationCodes').doc(verificationCode).get()
-        
+        console.log('CODE DOC', codeDoc.data())
         if (!codeDoc.exists) {
           throw new Error('Invalid verification code')
         }
@@ -416,7 +417,7 @@ export class AuthService {
         }
 
         // Check if code belongs to this user
-        if (codeData?.userId !== userDoc.id) {
+        if (codeData?.discordId !== userData?.discordId) {
           throw new Error('Verification code does not match this account')
         }
 
