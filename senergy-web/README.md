@@ -169,8 +169,3 @@ Public routes:
 - Check TypeScript version compatibility
 - Verify all environment variables are set
 
-## 📚 Additional Resources
-
-- [User Guide](../docs/USER_GUIDE.md)
-- [API Documentation](../docs/API.md)
-
