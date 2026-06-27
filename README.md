@@ -61,13 +61,6 @@ See individual README files in each folder for detailed setup instructions:
 - **Location-Based Search** - Find places and people nearby
 - **Rating System** - Rate places and build your preference profile
 
-## 📚 Documentation
-
-- [API Documentation](./docs/API.md)
-- [Database Schema](./docs/DATABASE_SCHEMA.md)
-- [Discord Commands](./docs/DISCORD_COMMANDS.md)
-- [User Guide](./docs/USER_GUIDE.md)
-
 ## 🛠️ Development
 
 ### Tech Stack
