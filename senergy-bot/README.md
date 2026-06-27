@@ -182,12 +182,6 @@ The bot communicates with the backend API via:
 - Verify code hasn't expired (24 hours)
 - Check code matches exactly
 
-## 📚 Additional Resources
-
-- [Discord Commands Documentation](../docs/DISCORD_COMMANDS.md)
-- [API Documentation](../docs/API.md)
-- [Discord.js Documentation](https://discord.js.org/)
-
 ## 🔒 Security Notes
 
 - Never commit `.env` file
