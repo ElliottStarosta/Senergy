@@ -174,9 +174,3 @@ Place search uses Algolia for geospatial queries. If Algolia is not configured, 
 **Port already in use:**
 - Change PORT in `.env`
 - Or kill the process using the port
-
-## 📚 Additional Resources
-
-- [API Documentation](../docs/API.md)
-- [Database Schema](../docs/DATABASE_SCHEMA.md)
-
